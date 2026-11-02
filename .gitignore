@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Binaries & logs
+*.exe
+*.log
+cloudflared.exe
+
+# Testing & scratch
+.pytest_cache/
+test_*.py
+setup_github_tools.py
+jobflow-ai.zip
+
+# Antigravity & IDE
+.gemini/
+.idea/
+.vscode/

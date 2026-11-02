@@ -31,14 +31,14 @@ def upload_project_to_github(token: str, repo_name: str = "jobflow-ai", is_priva
     username = user_res.json().get("login")
     print(f"Authenticated as GitHub user: @{username}")
 
-    # 2. Create Repository
-    print(f"\n[2/4] Creating repository '{username}/{repo_name}'...")
+    # 2. Create Repository if not exists
+    print(f"\n[2/4] Checking repository '{username}/{repo_name}'...")
     create_res = requests.post(
         "https://api.github.com/user/repos",
         headers=headers,
         json={
             "name": repo_name,
-            "description": "JobFlow AI - 24/7 Automated Job Search & Application Platform",
+            "description": "JobFlow AI - 24/7 Automated Job Search, Verified Links & Tracker Platform",
             "private": is_private,
             "auto_init": True
         },
@@ -47,7 +47,7 @@ def upload_project_to_github(token: str, repo_name: str = "jobflow-ai", is_priva
     if create_res.status_code in [200, 201]:
         print(f"Repository created: https://github.com/{username}/{repo_name}")
     elif create_res.status_code == 422:
-        print(f"Repository already exists, updating contents...")
+        print(f"Repository already exists, updating latest code...")
     else:
         print(f"ERROR creating repository: {create_res.status_code} {create_res.text}")
         sys.exit(1)
@@ -73,7 +73,7 @@ def upload_project_to_github(token: str, repo_name: str = "jobflow-ai", is_priva
     base_commit_sha = ref_res.json()["object"]["sha"]
     branch_ref_url = ref_res.json()["url"]
 
-    # 4. Upload all files
+    # 4. Upload all project files
     print("\n[3/4] Preparing and uploading project files...")
     workspace_dir = os.path.dirname(os.path.abspath(__file__))
     
@@ -81,10 +81,10 @@ def upload_project_to_github(token: str, repo_name: str = "jobflow-ai", is_priva
     
     ignore_files = {
         "cloudflared.exe", "huggingface_hub", "jobflow-ai.zip", "test_e2e_verification.py",
-        "verify_security_isolation.py"
+        "verify_security_isolation.py", "test_verification_and_links.py", "upload_to_github.py"
     }
-    ignore_extensions = {".exe", ".pyc", ".log"}
-    ignore_dirs = {"__pycache__", ".git", ".pytest_cache", ".gemini", "env", "venv", ".venv"}
+    ignore_extensions = {".exe", ".pyc", ".log", ".db", ".sqlite", ".sqlite3"}
+    ignore_dirs = {"__pycache__", ".git", ".pytest_cache", ".gemini", "env", "venv", ".venv", "scratch"}
 
     for root, dirs, files in os.walk(workspace_dir):
         # Filter out ignored directories
@@ -140,7 +140,7 @@ def upload_project_to_github(token: str, repo_name: str = "jobflow-ai", is_priva
         f"https://api.github.com/repos/{username}/{repo_name}/git/commits",
         headers=headers,
         json={
-            "message": "Deploy JobFlow AI website with multi-source search and strict experience filtering",
+            "message": "Deploy JobFlow AI with verified direct links, international visa evaluation, and scam prevention",
             "tree": new_tree_sha,
             "parents": [base_commit_sha]
         },
@@ -165,8 +165,8 @@ def upload_project_to_github(token: str, repo_name: str = "jobflow-ai", is_priva
     print("\n[4/4] SUCCESS! Code successfully published to GitHub.")
     print("=" * 65)
     print(f"GitHub Repository: https://github.com/{username}/{repo_name}")
-    print("\nCLICK THIS 1-CLICK LINK TO DEPLOY TO RENDER (100% FREE):")
-    print(f"https://render.com/deploy?repo=https://github.com/{username}/{repo_name}")
+    print("\nRENDER 100% FREE WEB SERVICE DEPLOYMENT LINK (NO PAYMENT / NO BLUEPRINT):")
+    print(f"https://dashboard.render.com/select-repo?type=web")
     print("=" * 65)
 
 if __name__ == "__main__":
