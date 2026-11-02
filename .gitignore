@@ -1,32 +1,49 @@
-# Byte-compiled / optimized / DLL files
+# Security & Secrets (Strictly Excluded from Git)
+.env
+.env.*
+*.env
+settings.json
+credentials/
+tokens/
+*.pem
+*.key
+*.cert
+token.json
+client_secret.json
+gmail_token.json
+
+# User Data & Private Resumes
+data/
+uploads/
+drafts/
+*.db
+*.sqlite
+*.sqlite3
+
+# Python Byte-code & Caches
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 
-# Environments
-.env
+# Virtual Environments
 .venv
 env/
 venv/
 ENV/
 
-# Databases
-*.db
-*.sqlite
-*.sqlite3
-
-# Binaries & logs
+# Executables & Logs
 *.exe
 *.log
 cloudflared.exe
 
-# Testing & scratch
-.pytest_cache/
+# Testing & Scratch Scripts
 test_*.py
 setup_github_tools.py
 jobflow-ai.zip
 
-# Antigravity & IDE
+# IDE & Editor Configurations
 .gemini/
 .idea/
 .vscode/
+.DS_Store
