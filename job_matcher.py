@@ -1,5 +1,5 @@
 import re
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from config import get_gemini_api_key, DEFAULT_GEMINI_MODEL
 from job_searcher import extract_experience_requirements
 
