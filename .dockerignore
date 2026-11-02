@@ -1,0 +1,15 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.git
+.gitignore
+.DS_Store
+*.log
+cloudflared.exe
+*.exe
+.pytest_cache/
