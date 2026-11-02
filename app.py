@@ -385,6 +385,8 @@ class SearchRequest(BaseModel):
     companies: List[str] = []
     sources: List[str] = []
     visa_requirement: str = "any"
+    verification_filter: str = "all"
+    include_expired: bool = False
     max_results: int = 30
     min_score: int = 30
 
@@ -451,6 +453,8 @@ async def execute_job_search(
         companies=req.companies,
         sources=req.sources,
         visa_requirement=req.visa_requirement,
+        verification_filter=req.verification_filter,
+        include_expired=req.include_expired,
         max_results=req.max_results
     )
 
@@ -754,7 +758,17 @@ class TrackerAddRequest(BaseModel):
     company: str
     location: Optional[str] = "Not specified"
     salary: Optional[str] = "Competitive"
-    application_link: Optional[str] = "#"
+    application_link: Optional[str] = ""
+    original_url: Optional[str] = ""
+    source: Optional[str] = ""
+    verification_status: Optional[str] = "Verified Job"
+    verified_at: Optional[str] = ""
+    verification_source: Optional[str] = ""
+    visa_status: Optional[str] = ""
+    country: Optional[str] = ""
+    is_apply_disabled: Optional[bool] = False
+    apply_status_text: Optional[str] = ""
+    recruiter_name: Optional[str] = ""
     recruiter_email: Optional[str] = ""
     status: Optional[str] = "Saved"
     notes: Optional[str] = ""
@@ -770,8 +784,18 @@ async def add_to_tracker(req: TrackerAddRequest, current_user: Dict[str, Any] = 
         "company": req.company,
         "location": req.location,
         "salary": req.salary,
-        "application_link": req.application_link,
-        "recruiter_email": req.recruiter_email,
+        "application_link": req.application_link or "",
+        "original_url": req.original_url or req.application_link or "",
+        "source": req.source or "",
+        "verification_status": req.verification_status or "Verified Job",
+        "verified_at": req.verified_at or "",
+        "verification_source": req.verification_source or "",
+        "visa_status": req.visa_status or "",
+        "country": req.country or "",
+        "is_apply_disabled": req.is_apply_disabled or False,
+        "apply_status_text": req.apply_status_text or "",
+        "recruiter_name": req.recruiter_name or "",
+        "recruiter_email": req.recruiter_email or "",
         "match": {"match_score": 0}
     }
     item = add_tracker_item(

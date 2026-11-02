@@ -283,14 +283,26 @@
           </div>
 
           <!-- Secondary Filters Row: Visa Sponsorship & Minimum Match Score -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-slate-800/60">
-            <!-- Visa Sponsorship -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 pt-2 border-t border-slate-800/60">
+            <!-- Visa Sponsorship & Authorization -->
             <div>
-              <label class="block text-xs font-medium text-slate-300 mb-1">Visa Sponsorship</label>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Visa & Work Authorization</label>
               <select id="inputVisa" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
-                <option value="any" selected>Any / Not Specified</option>
-                <option value="required">Requires Visa Sponsorship (e.g. H-1B, EU Blue Card)</option>
-                <option value="not_needed">Sponsorship Not Needed (Citizen / PR)</option>
+                <option value="any" selected>All (Global & India)</option>
+                <option value="sponsorship_available">Visa Sponsorship Available</option>
+                <option value="authorization_required">Existing Work Auth Required</option>
+                <option value="domestic_only">Domestic India Roles Only</option>
+                <option value="international_only">International Roles (Outside India)</option>
+              </select>
+            </div>
+
+            <!-- Listing Verification Status -->
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Listing Verification</label>
+              <select id="inputVerificationFilter" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+                <option value="all" selected>All Opportunities</option>
+                <option value="verified_only">Verified Jobs Only</option>
+                <option value="exclude_suspicious">Exclude Potentially Suspicious</option>
               </select>
             </div>
 
@@ -433,12 +445,40 @@
                 </div>
               </div>
 
-              <!-- Meta Tags: Salary, Visa, Employment Type, Experience -->
+              <!-- Meta Tags: Country, Salary, Visa, Verification, Employment Type, Experience -->
               <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span id="detailCountryBadge" class="px-2.5 py-0.5 rounded-md bg-slate-800 text-slate-200 font-medium border border-slate-700 flex items-center space-x-1">
+                  <span id="detailCountryFlag">🇮🇳</span>
+                  <span id="detailCountryName">India</span>
+                </span>
                 <span id="detailSalary" class="px-2.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 font-medium border border-emerald-500/20">Competitive Salary</span>
                 <span id="detailVisa" class="px-2.5 py-0.5 rounded-md bg-blue-500/10 text-blue-300 font-medium border border-blue-500/20">Visa Sponsorship Available</span>
+                <span id="detailVerificationBadge" class="px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">Verified Job</span>
                 <span id="detailEmploymentType" class="px-2.5 py-0.5 rounded-md bg-purple-500/10 text-purple-300 font-medium border border-purple-500/20">Full-time</span>
                 <span id="detailExperience" class="px-2.5 py-0.5 rounded-md bg-slate-800 text-slate-300 font-medium border border-slate-700">3–5 years</span>
+              </div>
+
+              <!-- Dedicated Authenticity & Recruiter Verification Panel -->
+              <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center space-x-2">
+                    <span id="detailVerificationStatusPill" class="px-2 py-0.5 rounded-md text-[11px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/30">Verified Job</span>
+                    <span id="detailVerifiedDate" class="text-slate-400 text-[11px]">Verified on recently</span>
+                  </div>
+                  <span id="detailVerifiedSource" class="text-[11px] text-slate-400 font-medium">Direct Platform Feed</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1.5 border-t border-slate-900 text-[11px]">
+                  <div class="flex items-center space-x-1.5 text-slate-300">
+                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
+                    <span>Recruiter Check:</span>
+                    <span id="detailRecruiterStatus" class="font-semibold text-emerald-400">Verified Corporate Recruiter</span>
+                  </div>
+                  <div class="flex items-center space-x-1.5 text-slate-300">
+                    <i data-lucide="globe" class="w-3.5 h-3.5 text-blue-400 shrink-0"></i>
+                    <span>Work Authorization:</span>
+                    <span id="detailVisaStatusSummary" class="font-semibold text-blue-400 truncate">Domestic Role (India)</span>
+                  </div>
+                </div>
               </div>
 
               <!-- Recruiter & Hiring Intelligence Bar -->

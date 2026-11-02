@@ -112,6 +112,27 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracker_user ON tracker_items(user_id, status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracker_user_job ON tracker_items(user_id, job_id)")
 
+        # Migration: ensure tracker_items has new verification and link preservation columns
+        cursor.execute("PRAGMA table_info(tracker_items)")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        new_columns = [
+            ("original_url", "TEXT DEFAULT ''"),
+            ("source", "TEXT DEFAULT ''"),
+            ("verification_status", "TEXT DEFAULT 'Verified Job'"),
+            ("verified_at", "TEXT DEFAULT ''"),
+            ("verification_source", "TEXT DEFAULT ''"),
+            ("visa_status", "TEXT DEFAULT ''"),
+            ("country", "TEXT DEFAULT ''"),
+            ("is_apply_disabled", "INTEGER DEFAULT 0"),
+            ("apply_status_text", "TEXT DEFAULT ''")
+        ]
+        for col_name, col_type in new_columns:
+            if col_name not in existing_cols:
+                try:
+                    cursor.execute(f"ALTER TABLE tracker_items ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass
+
         # 4. User Scheduler Configuration & Logs Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_schedulers (
@@ -403,14 +424,22 @@ def add_user_tracker_item(user_id: str, item: Dict[str, Any]) -> Dict[str, Any]:
         cursor.execute("""
             INSERT INTO tracker_items (
                 id, user_id, job_id, job_title, company, location, salary,
-                work_arrangement, application_link, recruiter_name, recruiter_email,
+                work_arrangement, application_link, original_url, source,
+                verification_status, verified_at, verification_source,
+                visa_status, country, is_apply_disabled, apply_status_text,
+                recruiter_name, recruiter_email,
                 match_score, status, email_status, notes, follow_up_date, applied_date,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             item_id, user_id, item.get("job_id", ""), item.get("job_title", ""), item.get("company", ""),
             item.get("location", ""), item.get("salary", ""), item.get("work_arrangement", ""),
-            item.get("application_link", ""), item.get("recruiter_name", ""), item.get("recruiter_email", ""),
+            item.get("application_link", ""), item.get("original_url") or item.get("application_link", ""),
+            item.get("source", ""), item.get("verification_status", "Verified Job"),
+            item.get("verified_at", ""), item.get("verification_source", ""),
+            item.get("visa_status", ""), item.get("country", ""),
+            1 if item.get("is_apply_disabled") else 0, item.get("apply_status_text", ""),
+            item.get("recruiter_name", ""), item.get("recruiter_email", ""),
             int(item.get("match_score", 50)), item.get("status", "Saved"), item.get("email_status", "Not Contacted"),
             item.get("notes", ""), item.get("follow_up_date", ""), item.get("applied_date", ""),
             now, now
@@ -428,8 +457,10 @@ def update_user_tracker_item(user_id: str, item_id: str, updates: Dict[str, Any]
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     allowed_keys = [
         "job_title", "company", "location", "salary", "work_arrangement",
-        "application_link", "recruiter_name", "recruiter_email", "match_score",
-        "status", "email_status", "notes", "follow_up_date", "applied_date"
+        "application_link", "original_url", "source", "verification_status",
+        "verified_at", "verification_source", "visa_status", "country",
+        "is_apply_disabled", "apply_status_text", "recruiter_name", "recruiter_email",
+        "match_score", "status", "email_status", "notes", "follow_up_date", "applied_date"
     ]
     
     set_clauses = ["updated_at = ?"]

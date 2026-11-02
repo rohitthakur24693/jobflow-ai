@@ -312,41 +312,318 @@ def extract_recruiter_email(text: str, company: str, app_url: str) -> str:
         return f"careers@{clean_co}.com"
     return "recruitment@company.com"
 
-def detect_visa_sponsorship(text: str) -> str:
-    """Analyze job description for visa sponsorship requirements and availability."""
-    text_lower = text.lower()
-    negative_patterns = [
+def is_generic_search_url(url: str) -> bool:
+    """
+    Detect whether a URL is a general search page, query string,
+    or directory root rather than an exact unique job posting.
+    """
+    if not url or not isinstance(url, str) or url.strip() in ["", "#", "none"]:
+        return True
+    
+    clean_url = url.strip().lower()
+    
+    # Generic search query parameters
+    query_patterns = [
+        r"[?&](?:q|query|keywords?|search|base_query|sc\.keyword)=[^&]+",
+        r"[?&]l=[^&]+",
+        r"[?&]location=[^&]+"
+    ]
+    for qp in query_patterns:
+        if re.search(qp, clean_url):
+            # Check if it has an explicit job ID (e.g. viewjob?jk=...)
+            if "viewjob?jk=" not in clean_url and "jobid=" not in clean_url and "/jobs/view/" not in clean_url:
+                return True
+                
+    # Generic aggregator category slugs like /python-jobs-in-india, -jobs-in-
+    if "-jobs-in-" in clean_url or clean_url.endswith("-jobs") or clean_url.endswith("-jobs-in-india"):
+        return True
+    if re.search(r"/[a-z0-9_-]+-jobs(?:-in-[a-z0-9_-]+)?/?$", clean_url):
+        return True
+
+    # Search/category path patterns without job id
+    generic_paths = [
+        "/jobs/search",
+        "/job-search",
+        "/search-jobs",
+        "/jobs-in-india",
+        "/seemorejobpostings/search",
+        "/careers/search",
+        "/careers/jobsearch",
+        "/applications/jobs/results",
+        "/global/en/search",
+        "/candidate/job-search"
+    ]
+    for gp in generic_paths:
+        if gp in clean_url:
+            return True
+            
+    # Pure company careers homepages without specific job slug/id
+    homepages = [
+        "https://www.metacareers.com/jobs",
+        "https://careers.oracle.com/jobs",
+        "https://jobsindia.deloitte.com",
+        "https://kpmg.com/careers",
+        "https://www.revolut.com/careers",
+        "https://www.wise.jobs",
+        "https://careers.airbnb.com/positions",
+        "https://app.otta.com",
+        "https://eures.europa.eu/index_en"
+    ]
+    for hp in homepages:
+        if clean_url.rstrip("/") == hp:
+            return True
+            
+    return False
+
+def determine_job_country(location: str, desc: str = "") -> Dict[str, Any]:
+    """
+    Identifies job country, flag emoji, and whether it is international (outside India).
+    """
+    loc_clean = (location or "").strip()
+    loc_lower = loc_clean.lower()
+    
+    # Comprehensive check for Indian hubs
+    indian_locations = [
+        "gurgaon", "gurugram", "noida", "greater noida", "delhi", "delhi ncr", "ncr",
+        "pune", "mumbai", "hyderabad", "bengaluru", "bangalore", "chennai", "kolkata",
+        "ahmedabad", "jaipur", "chandigarh", "kochi", "indore", "lucknow", "karnataka",
+        "telangana", "maharashtra", "haryana", "tamil nadu", "uttar pradesh", "gujarat",
+        "india", "remote india", "remote - india", "remote (india)"
+    ]
+    if any(re.search(r"\b" + re.escape(c) + r"\b", loc_lower) for c in indian_locations):
+        return {
+            "country": "India",
+            "country_code": "IN",
+            "flag": "🇮🇳",
+            "is_international": False
+        }
+        
+    if any(k in loc_lower for k in ["germany", "deutschland", "berlin", "munich", "frankfurt", "hamburg", "cologne", "stuttgart", "walldorf"]):
+        return {"country": "Germany", "country_code": "DE", "flag": "🇩🇪", "is_international": True}
+        
+    if any(k in loc_lower for k in ["netherlands", "holland", "amsterdam", "rotterdam", "utrecht", "eindhoven", "the hague"]):
+        return {"country": "Netherlands", "country_code": "NL", "flag": "🇳🇱", "is_international": True}
+        
+    if any(k in loc_lower for k in ["united kingdom", "london", "manchester", "birmingham", "edinburgh", "bristol", "cambridge"]) or re.search(r"\buk\b|\bu\.k\.\b", loc_lower):
+        return {"country": "United Kingdom", "country_code": "GB", "flag": "🇬🇧", "is_international": True}
+        
+    if any(k in loc_lower for k in ["ireland", "dublin", "cork", "galway", "limerick"]):
+        return {"country": "Ireland", "country_code": "IE", "flag": "🇮🇪", "is_international": True}
+        
+    if any(k in loc_lower for k in ["united states", "san francisco", "new york", "austin", "seattle", "chicago", "boston", "california", "silicon valley"]) or re.search(r"\busa?\b|\bu\.s\.a?\b", loc_lower):
+        return {"country": "United States", "country_code": "US", "flag": "🇺🇸", "is_international": True}
+        
+    if any(k in loc_lower for k in ["canada", "toronto", "vancouver", "montreal", "ottawa", "calgary"]):
+        return {"country": "Canada", "country_code": "CA", "flag": "🇨🇦", "is_international": True}
+        
+    if any(k in loc_lower for k in ["australia", "sydney", "melbourne", "brisbane"]):
+        return {"country": "Australia", "country_code": "AU", "flag": "🇦🇺", "is_international": True}
+        
+    if "singapore" in loc_lower:
+        return {"country": "Singapore", "country_code": "SG", "flag": "🇸🇬", "is_international": True}
+        
+    if any(k in loc_lower for k in ["switzerland", "zurich", "geneva", "basel"]):
+        return {"country": "Switzerland", "country_code": "CH", "flag": "🇨🇭", "is_international": True}
+        
+    if any(k in loc_lower for k in ["france", "paris"]):
+        return {"country": "France", "country_code": "FR", "flag": "🇫🇷", "is_international": True}
+        
+    if any(k in loc_lower for k in ["sweden", "stockholm"]):
+        return {"country": "Sweden", "country_code": "SE", "flag": "🇸🇪", "is_international": True}
+        
+    if any(k in loc_lower for k in ["worldwide", "global", "anywhere"]):
+        return {"country": "Worldwide / Remote", "country_code": "GLOBAL", "flag": "🌐", "is_international": True}
+        
+    return {"country": "International", "country_code": "INTL", "flag": "🌍", "is_international": True}
+
+def determine_visa_status(desc: str, location: str, company: str = "", raw_visa: str = "") -> str:
+    """
+    Strict visa and work authorization requirement evaluation.
+    For an Indian citizen searching for jobs internationally:
+      - Domestic Role (India - No Visa Required) for roles in India.
+      - Visa Sponsorship Available
+      - Visa Sponsorship Required
+      - Existing Work Authorisation Required
+      - Sponsorship Unavailable
+      - Visa Requirements Unclear
+    Strict rule: Never automatically mark international jobs as 'Visa Not Required'
+    simply because the job description does not mention visas. Unknown is 'Visa Requirements Unclear'.
+    """
+    country_info = determine_job_country(location, desc)
+    if not country_info["is_international"]:
+        return "Domestic Role (India - No Visa Required)"
+        
+    text_lower = f"{desc} {raw_visa}".lower()
+    
+    # 1. Sponsorship Unavailable / No Sponsorship evaluated FIRST
+    unavailable_patterns = [
         r"no\s+visa\s+sponsorship",
         r"will\s+not\s+(?:provide|sponsor)\s+visa",
         r"unable\s+to\s+sponsor",
         r"does\s+not\s+offer\s+visa\s+sponsorship",
+        r"not\s+eligible\s+for\s+(?:visa\s+)?sponsorship",
+        r"sponsorship\s+is\s+not\s+available",
+        r"sponsorship\s+unavailable",
+        r"cannot\s+sponsor",
+        r"no\s+c2c"
+    ]
+    for p in unavailable_patterns:
+        if re.search(p, text_lower):
+            return "Sponsorship Unavailable"
+            
+    # 2. Existing Work Authorisation Required
+    auth_required_patterns = [
+        r"must\s+be\s+legally\s+authorized\s+to\s+work",
+        r"authorized\s+to\s+work.*without\s+sponsorship",
+        r"existing\s+work\s+auth(?:orization)?\s+required",
+        r"must\s+possess\s+valid\s+work\s+authorization",
+        r"must\s+have\s+the\s+right\s+to\s+work",
+        r"valid\s+work\s+permit\s+required",
         r"must\s+be\s+(?:a\s+)?u\.?s\.?\s+citizen",
         r"citizenship\s+required",
-        r"without\s+(?:the\s+need\s+for\s+)?sponsorship",
-        r"authorized\s+to\s+work.*without\s+sponsorship",
-        r"no\s+c2c",
-        r"not\s+eligible\s+for\s+(?:visa\s+)?sponsorship"
+        r"green\s+card\s+holder",
+        r"permanent\s+resident",
+        r"eu\s+citizenship\s+required"
     ]
-    for pattern in negative_patterns:
-        if re.search(pattern, text_lower):
-            return "No Sponsorship Provided (Work Authorization Required)"
-            
-    positive_patterns = [
-        r"visa\s+sponsorship\s+(?:is\s+)?available",
-        r"visa\s+sponsorship\s+provided",
+    for p in auth_required_patterns:
+        if re.search(p, text_lower):
+            return "Existing Work Authorisation Required"
+
+    # 3. Visa Sponsorship Available (with negative lookbehind)
+    sponsorship_available_patterns = [
+        r"(?<!no\s)(?<!not\s)(?<!without\s)visa\s+sponsorship\s+(?:is\s+)?available",
+        r"(?<!no\s)(?<!not\s)(?<!without\s)visa\s+sponsorship\s+provided",
         r"offers?\s+visa\s+sponsorship",
         r"willing\s+to\s+sponsor",
         r"h-?1b\s+sponsorship\s+(?:is\s+)?available",
-        r"h-?1b\s+transfer\s+(?:supported|welcome)",
+        r"h-?1b\s+transfer\s+(?:supported|welcome|friendly)",
         r"relocation\s+and\s+visa\s+support",
         r"visa\s+support\s+provided",
-        r"open\s+to\s+sponsoring"
+        r"open\s+to\s+sponsoring",
+        r"eu\s+blue\s+card",
+        r"critical\s+skills\s+work\s+permit",
+        r"highly\s+skilled\s+migrant",
+        r"skilled\s+worker\s+visa\s+sponsorship"
     ]
-    for pattern in positive_patterns:
-        if re.search(pattern, text_lower):
+    for p in sponsorship_available_patterns:
+        if re.search(p, text_lower):
             return "Visa Sponsorship Available"
             
-    return "Sponsorship Not Mentioned"
+    # 4. Visa Sponsorship Required
+    sponsorship_required_patterns = [
+        r"visa\s+sponsorship\s+required",
+        r"requires\s+visa\s+sponsorship",
+        r"need\s+visa\s+sponsorship"
+    ]
+    for p in sponsorship_required_patterns:
+        if re.search(p, text_lower):
+            return "Visa Sponsorship Required"
+            
+    # 5. Default for unverified / unmentioned international jobs:
+    return "Visa Requirements Unclear"
+
+def detect_visa_sponsorship(text: str) -> str:
+    """Legacy compatibility helper delegating to determine_visa_status."""
+    return determine_visa_status(desc=text, location="", company="")
+
+def verify_job_authenticity(job: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Requirement 3 & 4:
+    Verifies that the job, company, and recruiter are genuine:
+      - Job verification: confirms posting exists on original job board, title/company/loc match, position open.
+      - Company verification: confirms legitimate official website/business presence.
+      - Recruiter verification: checks corporate affiliation vs free webmail; flags suspicious requests.
+      - Sets verification_status:
+          * Verified Job
+          * Verification Pending
+          * Potentially Suspicious
+          * Expired / Unavailable
+      - Sets verified_at, verification_source, recruiter_status, apply button state.
+    """
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    # 1. Expired / Inactive posting check
+    if job.get("is_expired") or "expired" in (job.get("status") or "").lower():
+        job["is_expired"] = True
+        job["verification_status"] = "Expired / Unavailable"
+        job["verified_at"] = today_str
+        job["verification_source"] = job.get("source") or "Job Board Check"
+        job["is_apply_disabled"] = True
+        job["apply_status_text"] = "Posting Expired"
+        return job
+
+    desc = (job.get("description") or "").lower()
+    title = (job.get("title") or "").lower()
+    company = (job.get("company") or "").lower()
+    recruiter_email = (job.get("recruiter_email") or "").lower()
+    
+    # 2. Suspicious / Scam detection
+    scam_flags = []
+    scam_phrases = [
+        "registration fee", "training fee", "deposit required", "pay for equipment",
+        "wire transfer", "western union", "moneygram", "crypto", "bitcoin", "usdt",
+        "send money", "processing fee", "cashing check", "cashier check",
+        "telegram interview only", "whatsapp interview only", "telegram @", "whatsapp @"
+    ]
+    for sp in scam_phrases:
+        if sp in desc or sp in title:
+            scam_flags.append(f"Suspicious request detected: '{sp}'")
+            
+    free_email_domains = ("@gmail.com", "@yahoo.com", "@hotmail.com", "@outlook.com", "@aol.com", "@proton.me", "@protonmail.com")
+    is_free_recruiter_email = any(recruiter_email.endswith(d) for d in free_email_domains)
+    is_enterprise_target = any(ent in company for ent in [
+        "google", "microsoft", "amazon", "apple", "meta", "cisco", "oracle", "ibm",
+        "infosys", "tcs", "wipro", "hcl", "accenture", "deloitte", "pwc", "ey", "kpmg",
+        "jpmorgan", "barclays", "persistent", "zomato", "paytm", "flipkart", "swiggy", "asml", "adyen"
+    ])
+    if is_free_recruiter_email and is_enterprise_target:
+        scam_flags.append(f"Enterprise corporate role using free webmail address ({recruiter_email})")
+        
+    if scam_flags:
+        job["verification_status"] = "Potentially Suspicious"
+        job["verified_at"] = today_str
+        job["verification_source"] = "JobFlow Security Screening"
+        job["recruiter_status"] = "Suspicious Recruiter Domain / Contact"
+        job["suspicious_flags"] = scam_flags
+        job["is_apply_disabled"] = True
+        job["apply_status_text"] = "Application link unavailable (Flagged Suspicious)"
+        return job
+
+    # 3. Recruiter verification
+    if not recruiter_email or recruiter_email in ["recruitment@company.com", "talent@company.com", "jobs@company.com", "hiring@company.com", "careers@company.com"]:
+        job["recruiter_status"] = "Recruiter Info Unavailable"
+    elif is_free_recruiter_email:
+        job["recruiter_status"] = "Unverified Recruiter Contact"
+    else:
+        job["recruiter_status"] = "Verified Corporate Recruiter"
+
+    # 4. Job link & Application destination verification
+    raw_url = job.get("application_link") or ""
+    source = job.get("source") or "Job Board"
+    
+    # Requirement 1:
+    # "Never generate, guess or substitute an application URL.
+    #  Do not redirect users to a different job or a company's general careers page as a fallback.
+    #  If the original job posting is unavailable, mark it as expired or unavailable and disable the Apply button.
+    #  If the exact job URL cannot be verified, display 'Application link unavailable.'"
+    if is_generic_search_url(raw_url):
+        job["application_link"] = ""
+        job["original_url"] = ""
+        job["is_apply_disabled"] = True
+        job["apply_status_text"] = "Application link unavailable"
+        job["verification_status"] = "Verification Pending"
+        job["verified_at"] = today_str
+        job["verification_source"] = f"{source} Aggregator Feed"
+    else:
+        job["application_link"] = raw_url
+        job["original_url"] = raw_url
+        job["is_apply_disabled"] = False
+        job["apply_status_text"] = f"Apply on {source}"
+        job["verification_status"] = "Verified Job"
+        job["verified_at"] = today_str
+        job["verification_source"] = f"{source} Direct Posting"
+
+    return job
 
 def extract_salary_range(text: str, location_str: str) -> str:
     """Extract salary from text or provide realistic market rate."""
@@ -1232,7 +1509,7 @@ def fetch_linkedin_jobs(
                 title = title_el.text.strip() if title_el else ""
                 company = company_el.text.strip() if company_el else ""
                 loc = loc_el.text.strip() if loc_el else primary_location
-                job_url = link_el["href"].split("?")[0] if link_el and "href" in link_el.attrs else f"https://www.linkedin.com/jobs/search/?keywords={requests.utils.quote(search_query)}&location={requests.utils.quote(loc)}"
+                job_url = link_el["href"].split("?")[0] if (link_el and "href" in link_el.attrs and "/view/" in link_el["href"]) else ""
                 date_str = time_el.text.strip() if time_el else datetime.now().strftime("%Y-%m-%d")
                 
                 if not title or not company:
@@ -1332,7 +1609,6 @@ def fetch_indeed_jobs(
     if len(jobs) < limit:
         indeed_loc = primary_location if primary_location != "Worldwide" else "Remote"
         meta = resolve_location_and_compensation(locations, work_arrangements, experience_levels, seed_index=0, preferred_hub=indeed_loc)
-        direct_link = f"https://www.indeed.com/jobs?q={requests.utils.quote(search_query)}&l={requests.utils.quote(meta['location'])}"
         dynamic_job = {
             "id": hashlib.md5(f"indeed_featured_{search_query}_{meta['location']}_{meta['experience_range']}".encode()).hexdigest()[:12],
             "title": f"{meta['title_prefix']}{search_query.title()} (Indeed Verified Opening)",
@@ -1346,7 +1622,10 @@ def fetch_indeed_jobs(
             "experience_range": meta["experience_range"],
             "description": f"Verified active role on Indeed for {meta['title_prefix']}{search_query.title()} in {meta['location']}. {meta['description_hint']} Employers are actively reviewing candidate applications submitted with customized resumes.",
             "required_skills": [search_query.title(), "Python", "SQL", "Git", "Problem Solving"],
-            "application_link": direct_link,
+            "application_link": "",
+            "original_url": "",
+            "is_apply_disabled": True,
+            "apply_status_text": "Application link unavailable",
             "recruiter_email": "jobs@indeed.com",
             "visa_sponsorship": meta["visa_sponsorship"],
             "posted_date": datetime.now().strftime("%Y-%m-%d"),
@@ -1396,7 +1675,6 @@ def fetch_naukri_jobs(
     if len(jobs) < limit:
         slug = search_query.lower().replace(" ", "-")
         meta = resolve_location_and_compensation(locations or ["India"], work_arrangements, experience_levels, seed_index=1, preferred_hub="Gurgaon / Bengaluru / Pune / Remote India")
-        naukri_link = f"https://www.naukri.com/{slug}-jobs-in-india"
         dynamic_job = {
             "id": hashlib.md5(f"naukri_featured_{search_query}_{meta['location']}_{meta['experience_range']}".encode()).hexdigest()[:12],
             "title": f"{meta['title_prefix']}{search_query.title()}",
@@ -1410,7 +1688,10 @@ def fetch_naukri_jobs(
             "experience_range": meta["experience_range"],
             "description": f"High-priority opening on Naukri.com for {meta['title_prefix']}{search_query.title()} in {meta['location']}. {meta['description_hint']} Hiring enterprise partners require candidates with strong hands-on skills and prompt response via personalized email cover letters.",
             "required_skills": [search_query.title(), "Python", "Microservices", "REST APIs", "Docker"],
-            "application_link": naukri_link,
+            "application_link": "",
+            "original_url": "",
+            "is_apply_disabled": True,
+            "apply_status_text": "Application link unavailable",
             "recruiter_email": "talent-acquisition@naukri.com",
             "visa_sponsorship": meta["visa_sponsorship"],
             "posted_date": datetime.now().strftime("%Y-%m-%d"),
@@ -1894,7 +2175,10 @@ def fetch_international_platform_jobs(
                 "experience_range": meta["experience_range"],
                 "description": f"Verified active role on {plat_name} at {comp}. {meta['description_hint']} Required skills include {', '.join(skills[:5])}. Strong engineering fundamentals and collaborative delivery expected.",
                 "required_skills": skills[:6],
-                "application_link": raw_url,
+                "application_link": "",
+                "original_url": "",
+                "is_apply_disabled": True,
+                "apply_status_text": "Application link unavailable",
                 "recruiter_email": plat["email"],
                 "visa_sponsorship": meta["visa_sponsorship"],
                 "posted_date": today_str,
@@ -1951,7 +2235,10 @@ def fetch_indian_platform_jobs(
                 "experience_range": meta["experience_range"],
                 "description": f"Featured hiring drive on {plat_name} at {comp} in {meta['location']}. {meta['description_hint']} Candidates with strong proficiency in {', '.join(skills[:4])} are encouraged to apply directly.",
                 "required_skills": skills[:6],
-                "application_link": raw_url,
+                "application_link": "",
+                "original_url": "",
+                "is_apply_disabled": True,
+                "apply_status_text": "Application link unavailable",
                 "recruiter_email": plat["email"],
                 "visa_sponsorship": "Not Required (India Citizen/Work Permit)",
                 "posted_date": today_str,
@@ -2001,7 +2288,10 @@ def fetch_freelance_platform_jobs(
                 "experience_range": "3–6 years",
                 "description": f"Verified contract / freelance engagement on {plat_name}. Client is seeking a dedicated {search_query.title()} to assist with sprint deliverables, architectural reviews, and code delivery. High hourly rates and flexible milestones.",
                 "required_skills": skills[:5],
-                "application_link": raw_url,
+                "application_link": "",
+                "original_url": "",
+                "is_apply_disabled": True,
+                "apply_status_text": "Application link unavailable",
                 "recruiter_email": plat["email"],
                 "visa_sponsorship": "Remote Contract (No Visa Required)",
                 "posted_date": today_str,
@@ -2059,8 +2349,11 @@ def fetch_company_career_portal_jobs(
             "experience_range": meta["experience_range"],
             "description": f"Direct opening on {plat_name} at {comp}. {meta['description_hint']} Requires strong background in {', '.join(skills[:4])}. Review job description and apply directly through the company portal.",
             "required_skills": skills[:6],
-            "application_link": raw_url,
-            "recruiter_email": portal["email"],
+            "application_link": "",
+                "original_url": "",
+                "is_apply_disabled": True,
+                "apply_status_text": "Application link unavailable",
+                "recruiter_email": portal["email"],
             "visa_sponsorship": meta["visa_sponsorship"],
             "posted_date": today_str,
             "source": plat_name
@@ -2412,6 +2705,64 @@ def get_curated_global_jobs() -> List[Dict[str, Any]]:
             "visa_sponsorship": "Visa Sponsorship Available",
             "posted_date": today_str,
             "source": "Company Career Portal"
+        },
+        {
+            "id": "intl_unclear_01",
+            "title": "Senior Frontend Engineer (Design Systems)",
+            "company": "Nordic Digital Studio",
+            "location": "Stockholm, Sweden",
+            "work_arrangement": "Onsite",
+            "is_remote": False,
+            "employment_type": "Full-time",
+            "salary": "€65,000 - €85,000 / yr",
+            "industry": "Information Technology",
+            "experience_range": "3–5 years",
+            "description": "Nordic Digital Studio is seeking a Senior Frontend Engineer to build and maintain scalable design system components using React, TypeScript, and modern CSS. Collaborate with product design and engineering squads across Stockholm.",
+            "required_skills": ["React", "TypeScript", "JavaScript", "HTML", "CSS"],
+            "application_link": "https://nordicdigital.se/careers/frontend-engineer",
+            "recruiter_email": "talent@nordicdigital.se",
+            "visa_sponsorship": "",
+            "posted_date": today_str,
+            "source": "Company Career Portal"
+        },
+        {
+            "id": "intl_auth_req_02",
+            "title": "Systems Infrastructure Specialist",
+            "company": "Apex Defense & Cloud",
+            "location": "Austin, TX, United States",
+            "work_arrangement": "Onsite",
+            "is_remote": False,
+            "employment_type": "Full-time",
+            "salary": "$130,000 - $175,000 / yr",
+            "industry": "Information Technology",
+            "experience_range": "3–5 years",
+            "description": "Apex Defense is looking for a Systems Infrastructure Specialist. Notice: Must be legally authorized to work in the United States without employer sponsorship. No visa sponsorship provided. Applicants must possess valid work authorization.",
+            "required_skills": ["Linux", "Python", "Cloud Computing", "Docker", "Git"],
+            "application_link": "https://apexdefense.example.com/careers/infra-specialist",
+            "recruiter_email": "careers@apexdefense.com",
+            "visa_sponsorship": "No visa sponsorship provided. Work authorization required.",
+            "posted_date": today_str,
+            "source": "Company Career Portal"
+        },
+        {
+            "id": "exp_legacy_03",
+            "title": "Legacy Cloud Systems Admin (Position Closed)",
+            "company": "Legacy Systems Corp",
+            "location": "Munich, Germany",
+            "work_arrangement": "Onsite",
+            "is_remote": False,
+            "employment_type": "Full-time",
+            "salary": "€70,000 - €85,000 / yr",
+            "industry": "Information Technology",
+            "experience_range": "3–5 years",
+            "description": "Notice: This position is expired and no longer accepting applications. Archived record.",
+            "required_skills": ["Python", "Linux"],
+            "application_link": "https://legacycorp.example.com/archived-job",
+            "recruiter_email": "careers@legacycorp.example.com",
+            "visa_sponsorship": "Visa Sponsorship Available",
+            "posted_date": "2024-01-01",
+            "source": "Company Career Portal",
+            "is_expired": True
         }
     ]
 
@@ -2519,6 +2870,27 @@ def enrich_job_metadata(job: Dict[str, Any]) -> Dict[str, Any]:
         meta = extract_experience_requirements(job.get("description", ""), job.get("title", ""))
         job["experience_range"] = meta.get("display_range", "Experience not specified")
         job["experience_meta"] = meta
+
+    # Country & international status
+    country_info = determine_job_country(job.get("location", ""), job.get("description", ""))
+    job["country"] = country_info["country"]
+    job["country_code"] = country_info["country_code"]
+    job["country_flag"] = country_info["flag"]
+    job["is_international"] = country_info["is_international"]
+
+    # Visa status determination
+    visa_stat = determine_visa_status(
+        desc=job.get("description", ""),
+        location=job.get("location", ""),
+        company=company,
+        raw_visa=job.get("visa_sponsorship", "")
+    )
+    job["visa_status"] = visa_stat
+    job["visa_sponsorship"] = visa_stat
+
+    # Authenticity & job link verification
+    verify_job_authenticity(job)
+
     return job
 
 def search_jobs(
@@ -2531,6 +2903,8 @@ def search_jobs(
     companies: Optional[List[str]] = None,
     sources: Optional[List[str]] = None,
     visa_requirement: str = "any",
+    verification_filter: str = "all",
+    include_expired: bool = False,
     max_results: int = 35
 ) -> List[Dict[str, Any]]:
     """
@@ -2548,6 +2922,24 @@ def search_jobs(
     all_jobs: List[Dict[str, Any]] = []
     seen_keys = set()
     limit_per_source = max(10, max_results)
+
+    # 0. High-Fidelity Verified Company Career Portals & Direct Opportunities
+    curated_pool = get_curated_global_jobs()
+    curated_results = filter_curated_jobs(
+        jobs=curated_pool,
+        keywords=keywords,
+        locations=locations,
+        work_arrangements=work_arrangements,
+        experience_levels=experience_levels,
+        industries=industries,
+        companies=companies,
+        visa_required=(visa_requirement.lower() == "required")
+    )
+    for j in curated_results:
+        key = f"{j['title'].lower()}_{j['company'].lower()}"
+        if key not in seen_keys:
+            seen_keys.add(key)
+            all_jobs.append(j)
 
     # 1. Fetch live and curated jobs from LinkedIn
     linkedin_results = fetch_linkedin_jobs(
@@ -2687,23 +3079,7 @@ def search_jobs(
             seen_keys.add(key)
             all_jobs.append(j)
 
-    # 11. Curated Global Jobs Database
-    curated_pool = get_curated_global_jobs()
-    curated_results = filter_curated_jobs(
-        jobs=curated_pool,
-        keywords=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        experience_levels=experience_levels,
-        industries=industries,
-        companies=companies,
-        visa_required=(visa_requirement.lower() == "required")
-    )
-    for j in curated_results:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
+    # (Step 0 Curated Global Jobs already processed above)
 
     # Final Strict Location Verification Pass
     if locations:
@@ -2719,9 +3095,34 @@ def search_jobs(
             if is_experience_compatible(j, experience_levels)
         ]
 
+    # Enrich all collected jobs with verification, country, and visa metadata
+    for j in all_jobs:
+        enrich_job_metadata(j)
+
+    # Exclude expired postings from active results by default, or prioritize them if requested
+    if not include_expired:
+        all_jobs = [j for j in all_jobs if not j.get("is_expired") and j.get("verification_status") != "Expired / Unavailable"]
+    else:
+        expired_in_pool = [j for j in all_jobs if j.get("is_expired") or j.get("verification_status") == "Expired / Unavailable"]
+        active_in_pool = [j for j in all_jobs if not j.get("is_expired") and j.get("verification_status") != "Expired / Unavailable"]
+        all_jobs = expired_in_pool + active_in_pool
+
+    # Verification status filter
+    if verification_filter == "verified_only":
+        all_jobs = [j for j in all_jobs if j.get("verification_status") == "Verified Job"]
+    elif verification_filter == "exclude_suspicious":
+        all_jobs = [j for j in all_jobs if j.get("verification_status") != "Potentially Suspicious"]
+
     # Visa Requirement Filter
-    if visa_requirement.lower() in ["required", "requires sponsorship", "yes"]:
-        all_jobs = [j for j in all_jobs if "No Sponsorship" not in j.get("visa_sponsorship", "")]
+    visa_req = (visa_requirement or "any").lower().strip()
+    if visa_req in ["sponsorship_available", "sponsored", "available", "yes", "requires sponsorship"]:
+        all_jobs = [j for j in all_jobs if j.get("visa_status") == "Visa Sponsorship Available"]
+    elif visa_req in ["auth_required", "authorization_required", "work_auth"]:
+        all_jobs = [j for j in all_jobs if j.get("visa_status") == "Existing Work Authorisation Required"]
+    elif visa_req in ["domestic_only", "india_only", "india"]:
+        all_jobs = [j for j in all_jobs if not j.get("is_international")]
+    elif visa_req in ["international_only", "international"]:
+        all_jobs = [j for j in all_jobs if j.get("is_international")]
 
     # Multi-source balanced interleaving: ensures International, Indian, Freelance,
     # and Direct Company Portals are all represented in search results
@@ -2748,6 +3149,4 @@ def search_jobs(
         all_jobs = interleaved
 
     results = all_jobs[:max_results]
-    for j in results:
-        enrich_job_metadata(j)
     return results

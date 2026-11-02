@@ -866,6 +866,39 @@ function removeFilterTag(type, val) {
   updateActiveFilterTags();
 }
 
+function getVerificationBadge(status, verifiedAt) {
+  const stat = status || 'Verified Job';
+  const vDate = verifiedAt ? `Verified: ${verifiedAt}` : 'Verified recently';
+  if (stat === 'Verified Job') {
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1" title="${vDate}"><i data-lucide="check-circle" class="w-3 h-3 text-emerald-400"></i><span>Verified</span></span>`;
+  } else if (stat === 'Potentially Suspicious') {
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center space-x-1" title="Security Warning: Suspicious signals or free webmail recruiter address"><i data-lucide="alert-triangle" class="w-3 h-3 text-rose-400"></i><span>Suspicious</span></span>`;
+  } else if (stat === 'Expired / Unavailable') {
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700 flex items-center space-x-1" title="Posting expired / no longer active"><i data-lucide="archive" class="w-3 h-3 text-slate-500"></i><span>Expired</span></span>`;
+  }
+  return `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center space-x-1" title="Verification Pending"><i data-lucide="clock" class="w-3 h-3 text-amber-400"></i><span>Pending</span></span>`;
+}
+
+function getVisaBadge(visaStatus, isInternational) {
+  const stat = visaStatus || 'Visa Requirements Unclear';
+  if (!isInternational || stat.includes('Domestic')) {
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700">Domestic (India)</span>`;
+  }
+  if (stat === 'Visa Sponsorship Available') {
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1"><i data-lucide="globe" class="w-3 h-3 text-emerald-400"></i><span>Visa Sponsorship</span></span>`;
+  }
+  if (stat === 'Existing Work Authorisation Required') {
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30">Work Auth Required</span>`;
+  }
+  if (stat === 'Visa Sponsorship Required') {
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">Visa Required</span>`;
+  }
+  if (stat === 'Sponsorship Unavailable') {
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">No Sponsorship</span>`;
+  }
+  return `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">Visa Unclear</span>`;
+}
+
 function getSourceBadge(source) {
   const s = source || 'Verified';
   const lower = s.toLowerCase();
@@ -996,6 +1029,7 @@ async function runJobSearch() {
   const companiesStr = document.getElementById("inputCompanies").value.trim();
   const companies = companiesStr ? companiesStr.split(",").map(c => c.trim()).filter(Boolean) : [];
   const visaReq = document.getElementById("inputVisa").value;
+  const verificationFilter = document.getElementById("inputVerificationFilter") ? document.getElementById("inputVerificationFilter").value : "all";
   const minScore = parseInt(document.getElementById("inputMinScore").value, 10);
   const maxResults = parseInt(document.getElementById("inputMaxResults").value, 10);
 
@@ -1009,6 +1043,7 @@ async function runJobSearch() {
     industries: appState.filters.industries,
     companies: companies,
     visa_requirement: visaReq,
+    verification_filter: verificationFilter,
     min_score: minScore,
     max_results: maxResults
   };
@@ -1125,9 +1160,9 @@ function renderJobCards() {
       </div>
 
       <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-        <span class="flex items-center space-x-1 text-slate-300">
-          <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-500"></i>
-          <span>${escapeHtml(job.location || 'Multiple')}</span>
+        <span class="flex items-center space-x-1 text-slate-200 font-medium">
+          <span>${job.country_flag || '📍'}</span>
+          <span>${escapeHtml(job.country || job.location || 'Multiple')}</span>
         </span>
         <span>•</span>
         <span class="font-medium text-emerald-300">${escapeHtml(job.salary || 'Competitive')}</span>
@@ -1135,12 +1170,18 @@ function renderJobCards() {
         <span class="text-slate-400">${escapeHtml(job.experience_range || '3–5 years')}</span>
       </div>
 
-      ${skillsRow ? `<div class="flex flex-wrap items-center gap-1.5 pt-0.5">${skillsRow}</div>` : ''}
+      <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+        ${getVerificationBadge(job.verification_status, job.verified_at)}
+        ${getVisaBadge(job.visa_status, job.is_international)}
+        ${skillsRow}
+      </div>
 
       <div class="flex items-center justify-between pt-1 text-[11px] border-t border-slate-800/60">
         <div class="flex items-center space-x-2">
           ${arrangementBadge}
-          <span class="text-[10px] text-emerald-400 font-medium">${job.recruiter_active || 'Active today'}</span>
+          <span class="text-[10px] ${job.is_apply_disabled ? 'text-slate-500' : 'text-emerald-400'} font-medium">
+            ${job.is_apply_disabled ? 'Link unavailable' : (job.recruiter_active || 'Active today')}
+          </span>
         </div>
         ${getSourceBadge(job.source)}
       </div>
@@ -1280,8 +1321,17 @@ async function toggleTrackJob(jobId, event) {
           company: job.company,
           location: job.location,
           salary: job.salary,
-          application_link: job.application_link,
-          recruiter_email: job.recruiter_email,
+          application_link: job.application_link || "",
+          original_url: job.original_url || job.application_link || "",
+          source: job.source || "",
+          verification_status: job.verification_status || "Verified Job",
+          verified_at: job.verified_at || "",
+          verification_source: job.verification_source || "",
+          visa_status: job.visa_status || job.visa_sponsorship || "",
+          country: job.country || "",
+          is_apply_disabled: job.is_apply_disabled || false,
+          apply_status_text: job.apply_status_text || "",
+          recruiter_email: job.recruiter_email || "",
           status: "Saved"
         })
       });
@@ -1334,15 +1384,73 @@ function selectJob(jobId) {
   document.getElementById("detailLocation").innerText = job.location || "Multiple";
   document.getElementById("detailArrangement").innerText = job.is_remote ? "Remote" : "Onsite / Hybrid";
   document.getElementById("detailSalary").innerText = job.salary || "Competitive Salary";
-  document.getElementById("detailVisa").innerText = job.visa_sponsorship || "Visa info unconfirmed";
+  document.getElementById("detailVisa").innerText = job.visa_status || job.visa_sponsorship || "Visa Requirements Unclear";
   document.getElementById("detailEmploymentType").innerText = job.employment_type || "Full-time";
   if (document.getElementById("detailExperience")) document.getElementById("detailExperience").innerText = job.experience_range || "3–5 years";
   
+  // Country badge
+  if (document.getElementById("detailCountryBadge")) {
+    document.getElementById("detailCountryFlag").innerText = job.country_flag || "📍";
+    document.getElementById("detailCountryName").innerText = job.country || job.location || "Location";
+  }
+
+  // Verification badges & trust panel
+  if (document.getElementById("detailVerificationBadge")) {
+    const vStat = job.verification_status || "Verified Job";
+    const verEl = document.getElementById("detailVerificationBadge");
+    verEl.innerText = vStat;
+    if (vStat === "Verified Job") {
+      verEl.className = "px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40";
+    } else if (vStat === "Potentially Suspicious") {
+      verEl.className = "px-2.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 font-bold border border-rose-500/40";
+    } else if (vStat === "Expired / Unavailable") {
+      verEl.className = "px-2.5 py-0.5 rounded-md bg-slate-800 text-slate-400 font-bold border border-slate-700";
+    } else {
+      verEl.className = "px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40";
+    }
+  }
+
+  if (document.getElementById("detailVerificationStatusPill")) {
+    document.getElementById("detailVerificationStatusPill").innerText = job.verification_status || "Verified Job";
+  }
+  if (document.getElementById("detailVerifiedDate")) {
+    document.getElementById("detailVerifiedDate").innerText = job.verified_at ? `Verified: ${job.verified_at}` : 'Verified recently';
+  }
+  if (document.getElementById("detailVerifiedSource")) {
+    document.getElementById("detailVerifiedSource").innerText = job.verification_source || `${job.source || 'Direct'} Verified Posting`;
+  }
+  if (document.getElementById("detailRecruiterStatus")) {
+    const recStat = job.recruiter_status || "Recruiter Info Unavailable";
+    const recEl = document.getElementById("detailRecruiterStatus");
+    recEl.innerText = recStat;
+    recEl.className = recStat.includes("Verified") ? "font-semibold text-emerald-400" : (recStat.includes("Suspicious") ? "font-semibold text-rose-400" : "font-semibold text-slate-400");
+  }
+  if (document.getElementById("detailVisaStatusSummary")) {
+    document.getElementById("detailVisaStatusSummary").innerText = job.visa_status || "Visa Requirements Unclear";
+  }
+
+  // Exact Apply Link Handling (Requirement 1)
   const applyLink = document.getElementById("detailApplyLink");
   if (applyLink) {
-    applyLink.href = job.application_link || "#";
-    const src = job.source || "Site";
-    applyLink.innerHTML = `<span>Apply on ${escapeHtml(src)}</span><i data-lucide="external-link" class="w-3.5 h-3.5"></i>`;
+    if (job.is_apply_disabled || !job.application_link || job.application_link === "#" || job.application_link === "") {
+      applyLink.href = "javascript:void(0)";
+      applyLink.removeAttribute("target");
+      applyLink.className = "px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 cursor-not-allowed opacity-80";
+      const statusLabel = job.apply_status_text || (job.is_expired ? "Posting Expired" : "Application link unavailable");
+      applyLink.innerHTML = `<i data-lucide="ban" class="w-3.5 h-3.5 text-slate-400"></i><span>${escapeHtml(statusLabel)}</span>`;
+      applyLink.onclick = (e) => {
+        e.preventDefault();
+        showToast(job.is_expired ? "This job posting has expired or is no longer accepting applications." : "Direct application URL unavailable for this listing. Contact recruiter via email draft or check verified career portal.", true);
+      };
+    } else {
+      applyLink.href = job.application_link;
+      applyLink.target = "_blank";
+      applyLink.rel = "noopener noreferrer";
+      applyLink.className = "px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-emerald-700/20 transition-all";
+      const src = job.source || "Site";
+      applyLink.innerHTML = `<span>Apply on ${escapeHtml(src)}</span><i data-lucide="external-link" class="w-3.5 h-3.5"></i>`;
+      applyLink.onclick = null;
+    }
   }
 
   // Hiring Team insights
@@ -1897,7 +2005,7 @@ function renderTrackerTable() {
         <input type="text" value="${escapeHtml(item.notes || '')}" placeholder="Add note..." onblur="handleTrackerFieldChange('${item.id}', 'notes', this.value)" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 w-36 focus:outline-none focus:border-emerald-500">
       </td>
       <td class="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
-        ${item.application_link && item.application_link !== '#' ? `<a href="${item.application_link}" target="_blank" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white inline-block" title="Apply Link"><i data-lucide="external-link" class="w-3.5 h-3.5"></i></a>` : ''}
+        ${item.application_link && item.application_link !== '#' && !item.is_apply_disabled ? `<a href="${item.application_link}" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded bg-emerald-950/60 border border-emerald-800 text-emerald-300 hover:text-white inline-block" title="Open Verified Application Link"><i data-lucide="external-link" class="w-3.5 h-3.5"></i></a>` : `<span class="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-500 inline-block cursor-not-allowed" title="${escapeHtml(item.apply_status_text || 'Application link unavailable')}"><i data-lucide="ban" class="w-3.5 h-3.5"></i></span>`}
         <button onclick="handleDeleteTrackerItem('${item.id}')" class="p-1.5 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors inline-block" title="Delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
       </td>
     `;
