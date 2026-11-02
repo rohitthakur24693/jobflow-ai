@@ -872,7 +872,7 @@ function getVerificationBadge(status, verifiedAt) {
   if (stat === 'Verified Job') {
     return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1" title="${vDate}"><i data-lucide="check-circle" class="w-3 h-3 text-emerald-400"></i><span>Verified</span></span>`;
   } else if (stat === 'Potentially Suspicious') {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center space-x-1" title="Security Warning: Suspicious signals or free webmail recruiter address"><i data-lucide="alert-triangle" class="w-3 h-3 text-rose-400"></i><span>Suspicious</span></span>`;
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center space-x-1" title="Security Warning: Potential fraud signals detected"><i data-lucide="alert-triangle" class="w-3 h-3 text-rose-400"></i><span>Suspicious</span></span>`;
   } else if (stat === 'Expired / Unavailable') {
     return `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700 flex items-center space-x-1" title="Posting expired / no longer active"><i data-lucide="archive" class="w-3 h-3 text-slate-500"></i><span>Expired</span></span>`;
   }
@@ -1419,12 +1419,7 @@ function selectJob(jobId) {
   if (document.getElementById("detailVerifiedSource")) {
     document.getElementById("detailVerifiedSource").innerText = job.verification_source || `${job.source || 'Direct'} Verified Posting`;
   }
-  if (document.getElementById("detailRecruiterStatus")) {
-    const recStat = job.recruiter_status || "Recruiter Info Unavailable";
-    const recEl = document.getElementById("detailRecruiterStatus");
-    recEl.innerText = recStat;
-    recEl.className = recStat.includes("Verified") ? "font-semibold text-emerald-400" : (recStat.includes("Suspicious") ? "font-semibold text-rose-400" : "font-semibold text-slate-400");
-  }
+
   if (document.getElementById("detailVisaStatusSummary")) {
     document.getElementById("detailVisaStatusSummary").innerText = job.visa_status || "Visa Requirements Unclear";
   }

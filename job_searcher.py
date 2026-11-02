@@ -555,9 +555,8 @@ def verify_job_authenticity(job: Dict[str, Any]) -> Dict[str, Any]:
     desc = (job.get("description") or "").lower()
     title = (job.get("title") or "").lower()
     company = (job.get("company") or "").lower()
-    recruiter_email = (job.get("recruiter_email") or "").lower()
     
-    # 2. Suspicious / Scam detection
+    # 2. Suspicious / Scam detection (Direct scam patterns only, no recruiter checking)
     scam_flags = []
     scam_phrases = [
         "registration fee", "training fee", "deposit required", "pay for equipment",
@@ -568,36 +567,17 @@ def verify_job_authenticity(job: Dict[str, Any]) -> Dict[str, Any]:
     for sp in scam_phrases:
         if sp in desc or sp in title:
             scam_flags.append(f"Suspicious request detected: '{sp}'")
-            
-    free_email_domains = ("@gmail.com", "@yahoo.com", "@hotmail.com", "@outlook.com", "@aol.com", "@proton.me", "@protonmail.com")
-    is_free_recruiter_email = any(recruiter_email.endswith(d) for d in free_email_domains)
-    is_enterprise_target = any(ent in company for ent in [
-        "google", "microsoft", "amazon", "apple", "meta", "cisco", "oracle", "ibm",
-        "infosys", "tcs", "wipro", "hcl", "accenture", "deloitte", "pwc", "ey", "kpmg",
-        "jpmorgan", "barclays", "persistent", "zomato", "paytm", "flipkart", "swiggy", "asml", "adyen"
-    ])
-    if is_free_recruiter_email and is_enterprise_target:
-        scam_flags.append(f"Enterprise corporate role using free webmail address ({recruiter_email})")
         
     if scam_flags:
         job["verification_status"] = "Potentially Suspicious"
         job["verified_at"] = today_str
         job["verification_source"] = "JobFlow Security Screening"
-        job["recruiter_status"] = "Suspicious Recruiter Domain / Contact"
         job["suspicious_flags"] = scam_flags
         job["is_apply_disabled"] = True
         job["apply_status_text"] = "Application link unavailable (Flagged Suspicious)"
         return job
 
-    # 3. Recruiter verification
-    if not recruiter_email or recruiter_email in ["recruitment@company.com", "talent@company.com", "jobs@company.com", "hiring@company.com", "careers@company.com"]:
-        job["recruiter_status"] = "Recruiter Info Unavailable"
-    elif is_free_recruiter_email:
-        job["recruiter_status"] = "Unverified Recruiter Contact"
-    else:
-        job["recruiter_status"] = "Verified Corporate Recruiter"
-
-    # 4. Job link & Application destination verification
+    # 3. Job link & Application destination verification
     raw_url = job.get("application_link") or ""
     source = job.get("source") or "Job Board"
     
@@ -2856,8 +2836,6 @@ def enrich_job_metadata(job: Dict[str, Any]) -> Dict[str, Any]:
     job["rating"] = round(4.3 + (comp_hash % 6) * 0.1, 1)
     job["reviews_count"] = 75 + (comp_hash % 500)
     job["verified_employer"] = True
-    job["recruiter_name"] = job.get("recruiter_name") or DEFAULT_RECRUITERS[comp_hash % len(DEFAULT_RECRUITERS)]
-    job["recruiter_active"] = "Active 2h ago" if comp_hash % 2 == 0 else "High response rate (< 24h)"
     job["interview_difficulty"] = f"Medium ({round(3.0 + (comp_hash % 9) * 0.1, 1)} / 5.0)"
     job["benefits"] = [
         "Comprehensive Health & Dental Coverage",
