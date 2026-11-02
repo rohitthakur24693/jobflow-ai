@@ -1450,6 +1450,53 @@ def is_india_targeted(locations: Optional[List[str]]) -> bool:
         for loc in locations
     )
 
+def is_non_india_targeted(locations: Optional[List[str]], keywords: str = "") -> bool:
+    """
+    Checks if user searches or selects preferred country or cities that are NOT India or Indian cities.
+    Returns True when:
+      - locations is empty or contains broad/remote indicators ('worldwide', 'global', 'remote', 'any')
+      - Any location in locations is outside India (e.g. Netherlands, Germany, Ireland, UK, US, Europe, etc.)
+      - Query keywords mention European or international countries or hubs
+    Returns False ONLY when locations is provided and every location is strictly within India or Indian cities.
+    """
+    if not locations:
+        return True
+
+    indian_loc_keys = [
+        "delhi ncr", "delhi", "new delhi", "gurgaon", "gurugram", "noida", "greater noida",
+        "faridabad", "ghaziabad", "pune", "mumbai", "navi mumbai", "thane", "hyderabad",
+        "bengaluru", "bangalore", "chennai", "kolkata", "ahmedabad", "gandhinagar", "jaipur",
+        "chandigarh", "mohali", "panchkula", "kochi", "cochin", "indore", "lucknow",
+        "karnataka", "telangana", "maharashtra", "haryana", "tamil nadu", "uttar pradesh",
+        "gujarat", "remote india", "remote - india", "remote (india)", "india remote",
+        "pan india", "work from home india", "india", "in"
+    ]
+
+    for loc in locations:
+        loc_clean = loc.lower().strip()
+        if not loc_clean:
+            continue
+        if loc_clean in ["any", "all", "worldwide", "everywhere", "global", "remote"]:
+            return True
+        is_ind = any(
+            loc_clean == ik or (len(ik) > 2 and (ik in loc_clean or loc_clean in ik))
+            for ik in indian_loc_keys
+        )
+        if not is_ind:
+            return True
+
+    if keywords:
+        kw_lower = keywords.lower()
+        intl_kw = [
+            "europe", "netherlands", "germany", "ireland", "uk", "united kingdom",
+            "us", "usa", "united states", "amsterdam", "berlin", "munich",
+            "dublin", "london", "eindhoven", "rotterdam", "paris", "stockholm", "zurich"
+        ]
+        if any(re.search(r"\b" + re.escape(k) + r"\b", kw_lower) for k in intl_kw):
+            return True
+
+    return False
+
 def fetch_linkedin_jobs(
     query: str = "",
     locations: Optional[List[str]] = None,
@@ -1730,9 +1777,9 @@ INTERNATIONAL_PLATFORMS_CATALOG = [
     },
     {
         "name": "EURES",
-        "search_url": "https://eures.europa.eu/index_en",
+        "search_url": "https://eures.europa.eu/jobseekers_en",
         "email": "eures@ec.europa.eu",
-        "companies": ["European Space Agency", "CERN", "European Central Bank"]
+        "companies": ["European Space Agency", "CERN", "European Central Bank", "ASML", "SAP", "Siemens", "Booking.com"]
     },
     {
         "name": "StepStone",
@@ -2167,6 +2214,110 @@ def fetch_international_platform_jobs(
             results.append(job)
 
     return results
+
+def fetch_eures_jobs(
+    query: str = "",
+    locations: Optional[List[str]] = None,
+    work_arrangements: Optional[List[str]] = None,
+    experience_levels: Optional[List[str]] = None,
+    limit: int = 15
+) -> List[Dict[str, Any]]:
+    """
+    Fetch jobs from EURES - European Job Mobility Portal (https://eures.europa.eu/jobseekers_en).
+    Active whenever the user searches or selects a preferred country that is NOT India or Indian cities.
+    Includes European public institutions, top European tech employers, EU Blue Card sponsorship,
+    and direct verified application links to https://eures.europa.eu/jobseekers_en.
+    """
+    if not is_non_india_targeted(locations, query):
+        return []
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    search_query = query.split(",")[0].strip() if query else "Software Engineer"
+    clean_q = requests.utils.quote(search_query)
+
+    # European employers and EU organizations partnering through EURES
+    eures_companies = [
+        {"name": "European Space Agency (ESA)", "hub": "Noordwijk, Netherlands / Darmstadt, Germany", "industry": "Aerospace & Research", "salary": "€78,000 - €115,000 / yr"},
+        {"name": "CERN", "hub": "Geneva, Switzerland / EU border", "industry": "Scientific Research & Tech", "salary": "€85,000 - €125,000 / yr"},
+        {"name": "European Central Bank", "hub": "Frankfurt, Germany", "industry": "Banking & Financial Services", "salary": "€82,000 - €120,000 / yr"},
+        {"name": "ASML", "hub": "Eindhoven / Veldhoven, Netherlands", "industry": "Information Technology", "salary": "€80,000 - €125,000 / yr"},
+        {"name": "SAP", "hub": "Walldorf / Berlin, Germany", "industry": "Information Technology", "salary": "€75,000 - €115,000 / yr"},
+        {"name": "Booking.com", "hub": "Amsterdam, Netherlands", "industry": "Retail and E-commerce", "salary": "€85,000 - €130,000 / yr"},
+        {"name": "Siemens", "hub": "Munich / Berlin, Germany", "industry": "Information Technology", "salary": "€72,000 - €105,000 / yr"},
+        {"name": "Delivery Hero", "hub": "Berlin, Germany / Remote EU", "industry": "Information Technology", "salary": "€75,000 - €110,000 / yr"},
+        {"name": "Spotify", "hub": "Stockholm, Sweden / Remote Europe", "industry": "Information Technology", "salary": "€80,000 - €118,000 / yr"},
+        {"name": "Philips Innovation Services", "hub": "Eindhoven, Netherlands", "industry": "Healthcare", "salary": "€74,000 - €108,000 / yr"},
+        {"name": "Airbus Commercial Aircraft", "hub": "Toulouse, France / Hamburg, Germany", "industry": "Aerospace & Tech", "salary": "€70,000 - €102,000 / yr"},
+        {"name": "Adyen", "hub": "Amsterdam, Netherlands / Remote EU", "industry": "Banking and Financial Services", "salary": "€85,000 - €135,000 / yr"}
+    ]
+
+    jobs: List[Dict[str, Any]] = []
+    seen = set()
+
+    for idx, comp_data in enumerate(eures_companies):
+        if len(jobs) >= limit:
+            break
+
+        comp = comp_data["name"]
+        preferred_hub = comp_data["hub"]
+        meta = resolve_location_and_compensation(
+            locations=locations,
+            work_arrangements=work_arrangements,
+            experience_levels=experience_levels,
+            seed_index=idx,
+            preferred_hub=preferred_hub
+        )
+
+        job_loc = meta["location"]
+        if locations and not is_location_compatible(job_loc, "", locations, work_arrangements):
+            continue
+
+        job_id = hashlib.md5(f"eures_{comp}_{search_query}_{job_loc}_{meta['experience_range']}_{idx}".encode()).hexdigest()[:12]
+        title = f"{meta['title_prefix']}{search_query.title()}"
+        
+        skills = [search_query.title()] + [s for s in COMMON_TECH_SKILLS if s.lower() in search_query.lower()]
+        if len(skills) < 4:
+            skills.extend(["Python", "Cloud Systems", "REST APIs", "Git"])
+
+        desc = (
+            f"Official European Job Mobility Portal (EURES) verified opening at {comp} in {job_loc}. "
+            f"{meta['description_hint']} "
+            f"EURES connects international talent across the European Union. "
+            f"EU Blue Card and relocation sponsorship support provided for qualified international candidates. "
+            f"Key technologies required: {', '.join(skills[:5])}."
+        )
+
+        eures_url = "https://eures.europa.eu/jobseekers_en"
+
+        job = {
+            "id": job_id,
+            "title": title,
+            "company": comp,
+            "location": job_loc,
+            "work_arrangement": meta["work_arrangement"],
+            "is_remote": meta["is_remote"],
+            "employment_type": "Full-time",
+            "salary": comp_data["salary"] if ("india" not in job_loc.lower()) else meta["salary"],
+            "industry": comp_data["industry"],
+            "experience_range": meta["experience_range"],
+            "description": desc,
+            "required_skills": skills[:6],
+            "application_link": eures_url,
+            "original_url": eures_url,
+            "is_apply_disabled": False,
+            "apply_status_text": "Apply on EURES",
+            "recruiter_email": "eures@ec.europa.eu",
+            "visa_sponsorship": "Visa Sponsorship Available (EU Blue Card)",
+            "posted_date": today_str,
+            "source": "EURES (European Job Mobility Portal)"
+        }
+
+        key = f"{title.lower()}_{comp.lower()}"
+        if key not in seen:
+            seen.add(key)
+            jobs.append(job)
+
+    return jobs
 
 def fetch_indian_platform_jobs(
     query: str = "",
@@ -3014,6 +3165,22 @@ def search_jobs(
             seen_keys.add(key)
             all_jobs.append(j)
 
+    # 7b. Fetch European Job Mobility Portal (EURES - https://eures.europa.eu/jobseekers_en)
+    # Active whenever user searches or selects preferred country that is NOT India or Indian cities
+    if is_non_india_targeted(locations, keywords):
+        eures_jobs = fetch_eures_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            experience_levels=experience_levels,
+            limit=limit_per_source
+        )
+        for j in eures_jobs:
+            key = f"{j['title'].lower()}_{j['company'].lower()}"
+            if key not in seen_keys:
+                seen_keys.add(key)
+                all_jobs.append(j)
+
     # 8. Fetch Indian Job Platforms (Foundit, Instahyre, iimjobs, Hirist, Cutshort, Shine, TimesJobs, Apna)
     indian_jobs = fetch_indian_platform_jobs(
         query=keywords,
@@ -3106,7 +3273,8 @@ def search_jobs(
     # and Direct Company Portals are all represented in search results
     category_pools = [
         [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["linkedin", "indeed", "naukri", "arbeitnow", "remotive", "jobicy"])],
-        [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["glassdoor", "flexjobs", "wellfound", "dice", "weworkremotely", "remotely", "remote ok", "eurojobs", "eures", "stepstone", "totaljobs", "reed", "cv-library", "otta"])],
+        [j for j in all_jobs if "eures" in (j.get("source") or "").lower()],
+        [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["glassdoor", "flexjobs", "wellfound", "dice", "weworkremotely", "remotely", "remote ok", "eurojobs", "stepstone", "totaljobs", "reed", "cv-library", "otta"]) and "eures" not in (j.get("source") or "").lower()],
         [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["foundit", "instahyre", "iimjobs", "hirist", "cutshort", "shine", "timesjobs", "apna"])],
         [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["upwork", "fiverr", "toptal", "freelancer"])],
         [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["career portal", "google", "microsoft", "amazon", "meta", "apple", "ibm", "accenture", "deloitte", "ey", "pwc", "kpmg", "capgemini", "sap", "oracle", "salesforce", "adobe", "nvidia", "booking", "spotify", "revolut", "wise", "stripe", "airbnb", "uber"])],

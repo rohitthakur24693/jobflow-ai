@@ -16,6 +16,7 @@ gmail_token.json
 data/
 uploads/
 drafts/
+sample_data/
 *.db
 *.sqlite
 *.sqlite3
@@ -39,6 +40,7 @@ cloudflared.exe
 
 # Testing & Scratch Scripts
 test_*.py
+verify_*.py
 setup_github_tools.py
 jobflow-ai.zip
 
