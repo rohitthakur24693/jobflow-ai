@@ -92,10 +92,61 @@ class ChromeBrowserClient:
         return self.run_commands("tab list")
 
     def search_linkedin_jobs(self, keywords: str, location: str = "India") -> Dict[str, Any]:
-        """Search jobs on LinkedIn directly in user's active Chrome session."""
+        """Search jobs on LinkedIn directly in user's active Chrome session and extract job listings."""
         url = f"https://www.linkedin.com/jobs/search/?keywords={keywords.replace(' ', '%20')}&location={location.replace(' ', '%20')}"
-        cmds = f"tab new {url}\nwait 4000\nget title\nsnapshot -i --depth 5"
-        return self.run_commands(cmds)
+        
+        # JS snippet to extract job cards from LinkedIn (uses single quotes only)
+        extract_js = (
+            "() => {"
+            "  const items = [];"
+            "  const cards = document.querySelectorAll('li.jobs-search-results__list-item, div.job-card-container, div[data-job-id], div.base-card');"
+            "  cards.forEach(el => {"
+            "    const titleEl = el.querySelector('a.job-card-list__title--link, a.job-card-container__link, strong, h3');"
+            "    const compEl = el.querySelector('.artdeco-entity-lockup__subtitle, .job-card-container__primary-description, h4');"
+            "    const locEl = el.querySelector('.job-card-container__metadata-item, .artdeco-entity-lockup__caption');"
+            "    const linkEl = el.querySelector('a[href*=\\'/jobs/view/\\']') || el.querySelector('a');"
+            "    const title = titleEl ? titleEl.innerText.trim() : '';"
+            "    const company = compEl ? compEl.innerText.trim() : 'N/A';"
+            "    const loc = locEl ? locEl.innerText.trim() : 'N/A';"
+            "    const link = linkEl ? linkEl.href : '';"
+            "    if (title && title.length > 2 && !items.some(x => x.title === title && x.company === company)) {"
+            "      items.push({ title, company, location: loc, link });"
+            "    }"
+            "  });"
+            "  return items.slice(0, 15);"
+            "}"
+        )
+        # Ensure zero double quotes inside the JS function
+        extract_js_clean = extract_js.replace('"', "'")
+        
+        cmds = (
+            f"tab new {url}\n"
+            "wait 4000\n"
+            "scroll down 500\n"
+            "wait 2000\n"
+            f"eval \"{extract_js_clean}\""
+        )
+        
+        raw_res = self.run_commands(cmds)
+        output = raw_res.get("output", "")
+        
+        # Try to parse JSON from eval output
+        parsed_jobs = []
+        for line in output.split("\n"):
+            line = line.strip()
+            if line.startswith("[") and line.endswith("]"):
+                try:
+                    parsed_jobs = json.loads(line)
+                    break
+                except Exception:
+                    pass
+        
+        return {
+            "success": raw_res.get("success", False),
+            "url": url,
+            "jobs": parsed_jobs,
+            "raw_output": output
+        }
 
 def safe_print(text: Any):
     try:
@@ -115,7 +166,15 @@ if __name__ == "__main__":
         loc = args[args.index("--search") + 2] if len(args) > args.index("--search") + 2 else "India"
         print(f"Searching LinkedIn in Chrome for '{kw}' in '{loc}'...")
         res = client.search_linkedin_jobs(kw, loc)
-        safe_print(res.get("output", res))
+        jobs = res.get("jobs", [])
+        if jobs:
+            print(f"\nFound {len(jobs)} LinkedIn Jobs:")
+            for i, j in enumerate(jobs, 1):
+                print(f"{i}. {j.get('title')} at {j.get('company')} ({j.get('location')})")
+                print(f"   Link: {j.get('link')}")
+        else:
+            print("Raw response:")
+            safe_print(res.get("raw_output", res))
     elif "--cmd" in args:
         cmd_str = " ".join(args[args.index("--cmd") + 1:])
         res = client.run_commands(cmd_str)
