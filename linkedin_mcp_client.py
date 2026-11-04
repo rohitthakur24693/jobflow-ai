@@ -135,6 +135,69 @@ class LinkedInMCPClient:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def set_cookie(self, li_at: str) -> Dict[str, Any]:
+        """Manually seed LinkedIn session using li_at session cookie from an existing browser."""
+        profile_dir = os.path.expanduser(r"~\.linkedin-mcp\profile")
+        auth_root = os.path.dirname(profile_dir)
+        os.makedirs(profile_dir, exist_ok=True)
+        cookie_file = os.path.join(auth_root, "cookies.json")
+        
+        cookies = [
+            {
+                "name": "li_at",
+                "value": li_at.strip(),
+                "domain": ".linkedin.com",
+                "path": "/",
+                "expires": -1,
+                "httpOnly": True,
+                "secure": True,
+                "sameSite": "None"
+            }
+        ]
+        with open(cookie_file, "w", encoding="utf-8") as f:
+            json.dump(cookies, f, indent=2)
+
+        # Validate with mcp-server-linkedin driver
+        script = f"""
+import asyncio, sys, json
+from pathlib import Path
+from linkedin_mcp_server.drivers.browser import validate_imported_cookies
+from linkedin_mcp_server.session_state import write_source_state
+
+async def main():
+    u_dir = Path(r'{profile_dir}')
+    c_path = Path(r'{cookie_file}')
+    try:
+        ok = await validate_imported_cookies(c_path, u_dir)
+        if ok:
+            write_source_state(u_dir)
+            print("SESSION_VALIDATED_OK")
+            sys.exit(0)
+        else:
+            print("SESSION_VALIDATION_FAILED")
+            sys.exit(1)
+    except Exception as e:
+        print(f"ERROR: {{e}}")
+        sys.exit(2)
+
+asyncio.run(main())
+"""
+        try:
+            res = subprocess.run(
+                [self.uvx_cmd, "--from", "mcp-server-linkedin@latest", "python", "-c", script],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"}
+            )
+            success = "SESSION_VALIDATED_OK" in res.stdout
+            return {
+                "success": success,
+                "output": (res.stdout + "\n" + res.stderr).strip()
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def search_jobs(
         self,
         keywords: str,
@@ -172,6 +235,14 @@ if __name__ == "__main__":
 
     if "--login" in args:
         client.start_login()
+    elif "--cookie" in args:
+        idx = args.index("--cookie")
+        if idx + 1 < len(args):
+            c_val = args[idx + 1]
+            res = client.set_cookie(c_val)
+            print("Cookie setup result:", res)
+        else:
+            print("Please provide the li_at cookie value: python linkedin_mcp_client.py --cookie <value>")
     elif "--import" in args:
         browser = "auto"
         for a in args:
@@ -197,6 +268,7 @@ if __name__ == "__main__":
         clean_out = (status.get("output") or "").encode("ascii", "ignore").decode()
         print("Details:\n", clean_out)
         print("\nCommands:")
-        print("  python linkedin_mcp_client.py --login              (Log into LinkedIn via browser)")
+        print("  python linkedin_mcp_client.py --login              (Log into LinkedIn via browser window)")
+        print("  python linkedin_mcp_client.py --cookie <li_at>     (Set li_at session cookie from Chrome)")
         print("  python linkedin_mcp_client.py --import             (Import session from Chrome/Edge)")
         print("  python linkedin_mcp_client.py --search <kw> <loc>  (Search LinkedIn jobs)")
