@@ -1519,69 +1519,98 @@ def fetch_linkedin_jobs(
         "Accept-Language": "en-US,en;q=0.5"
     }
 
-    # 1. Attempt live LinkedIn public guest search
+    # 1. Attempt LinkedIn MCP search (authenticated session)
     try:
-        url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={requests.utils.quote(search_query)}&location={requests.utils.quote(primary_location)}&start=0"
-        resp = requests.get(url, headers=headers, timeout=6)
-        if resp.status_code == 200 and resp.text:
-            soup = BeautifulSoup(resp.text, "html.parser")
-            cards = soup.find_all("li")
-            for c in cards:
-                title_el = c.find("h3", class_=re.compile(r"base-search-card__title|job-title"))
-                company_el = c.find("h4", class_=re.compile(r"base-search-card__subtitle|job-company"))
-                loc_el = c.find("span", class_=re.compile(r"job-search-card__location|job-location"))
-                link_el = c.find("a", class_=re.compile(r"base-card__full-link|job-link"))
-                time_el = c.find("time")
-                
-                title = title_el.text.strip() if title_el else ""
-                company = company_el.text.strip() if company_el else ""
-                loc = loc_el.text.strip() if loc_el else primary_location
-                job_url = link_el["href"].split("?")[0] if (link_el and "href" in link_el.attrs and "/view/" in link_el["href"]) else ""
-                date_str = time_el.text.strip() if time_el else datetime.now().strftime("%Y-%m-%d")
-                
-                if not title or not company:
-                    continue
-                    
-                key = f"{title.lower()}_{company.lower()}"
-                if key in seen:
-                    continue
-                seen.add(key)
-                
-                desc = f"{title} at {company} located in {loc}. Seeking qualified candidates with expertise in {search_query}. Review requirements and submit application directly on LinkedIn."
-                req_skills = extract_required_skills(f"{title} {desc}")
-                if not req_skills:
-                    req_skills = [search_query.title(), "System Design", "Agile", "Git"]
-                    
-                recruiter_email = extract_recruiter_email(desc, company, job_url)
-                visa_info = detect_visa_sponsorship(desc)
-                salary = extract_salary_range(desc, loc)
-                work_arr = detect_work_arrangement(loc, desc)
-                job_id = hashlib.md5(f"linkedin_{title}_{company}_{job_url}".encode()).hexdigest()[:12]
-                
-                jobs.append({
-                    "id": job_id,
-                    "title": title,
-                    "company": company,
-                    "location": loc,
-                    "work_arrangement": work_arr,
-                    "is_remote": work_arr == "Remote",
-                    "employment_type": "Full-time",
-                    "salary": salary,
-                    "industry": "Information Technology",
-                    "description": desc,
-                    "required_skills": req_skills,
-                    "application_link": job_url,
-                    "recruiter_email": recruiter_email,
-                    "visa_sponsorship": visa_info,
-                    "posted_date": date_str,
-                    "source": "LinkedIn"
-                })
-                if len(jobs) >= limit:
-                    break
-    except Exception as e:
-        print(f"Live LinkedIn fetch error: {e}")
+        from linkedin_mcp_client import LinkedInMCPClient
+        mcp_client = LinkedInMCPClient()
+        status = mcp_client.get_status()
+        if status.get("authenticated"):
+            mcp_jobs = mcp_client.search_jobs_structured(
+                keywords=search_query,
+                location=primary_location,
+                max_pages=1,
+                limit=limit
+            )
+            for j in mcp_jobs:
+                key = f"{j['title'].lower()}_{j['company'].lower()}"
+                if key not in seen:
+                    seen.add(key)
+                    if locations and not is_location_compatible(j['location'], j['description'], locations, work_arrangements):
+                        continue
+                    if experience_levels and not is_experience_compatible(j, experience_levels):
+                        continue
+                    jobs.append(j)
+                    if len(jobs) >= limit:
+                        break
+            if jobs:
+                print(f"[LinkedIn MCP] Successfully retrieved {len(jobs)} live authenticated jobs.")
+    except Exception as mcp_err:
+        print(f"[LinkedIn MCP] Notice: {mcp_err}")
 
-    # 2. Add curated LinkedIn active jobs
+    # 2. Attempt live LinkedIn public guest search (fallback if needed)
+    if len(jobs) < limit:
+        try:
+            url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={requests.utils.quote(search_query)}&location={requests.utils.quote(primary_location)}&start=0"
+            resp = requests.get(url, headers=headers, timeout=6)
+            if resp.status_code == 200 and resp.text:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                cards = soup.find_all("li")
+                for c in cards:
+                    title_el = c.find("h3", class_=re.compile(r"base-search-card__title|job-title"))
+                    company_el = c.find("h4", class_=re.compile(r"base-search-card__subtitle|job-company"))
+                    loc_el = c.find("span", class_=re.compile(r"job-search-card__location|job-location"))
+                    link_el = c.find("a", class_=re.compile(r"base-card__full-link|job-link"))
+                    time_el = c.find("time")
+                    
+                    title = title_el.text.strip() if title_el else ""
+                    company = company_el.text.strip() if company_el else ""
+                    loc = loc_el.text.strip() if loc_el else primary_location
+                    job_url = link_el["href"].split("?")[0] if (link_el and "href" in link_el.attrs and "/view/" in link_el["href"]) else ""
+                    date_str = time_el.text.strip() if time_el else datetime.now().strftime("%Y-%m-%d")
+                    
+                    if not title or not company:
+                        continue
+                        
+                    key = f"{title.lower()}_{company.lower()}"
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    
+                    desc = f"{title} at {company} located in {loc}. Seeking qualified candidates with expertise in {search_query}. Review requirements and submit application directly on LinkedIn."
+                    req_skills = extract_required_skills(f"{title} {desc}")
+                    if not req_skills:
+                        req_skills = [search_query.title(), "System Design", "Agile", "Git"]
+                        
+                    recruiter_email = extract_recruiter_email(desc, company, job_url)
+                    visa_info = detect_visa_sponsorship(desc)
+                    salary = extract_salary_range(desc, loc)
+                    work_arr = detect_work_arrangement(loc, desc)
+                    job_id = hashlib.md5(f"linkedin_{title}_{company}_{job_url}".encode()).hexdigest()[:12]
+                    
+                    jobs.append({
+                        "id": job_id,
+                        "title": title,
+                        "company": company,
+                        "location": loc,
+                        "work_arrangement": work_arr,
+                        "is_remote": work_arr == "Remote",
+                        "employment_type": "Full-time",
+                        "salary": salary,
+                        "industry": "Information Technology",
+                        "description": desc,
+                        "required_skills": req_skills,
+                        "application_link": job_url,
+                        "recruiter_email": recruiter_email,
+                        "visa_sponsorship": visa_info,
+                        "posted_date": date_str,
+                        "source": "LinkedIn"
+                    })
+                    if len(jobs) >= limit:
+                        break
+        except Exception as e:
+            print(f"Live LinkedIn fetch error: {e}")
+
+    # 3. Add curated LinkedIn active jobs
     curated_linkedin = get_curated_linkedin_jobs()
     for cj in curated_linkedin:
         if len(jobs) >= limit * 2:
