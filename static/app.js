@@ -18,12 +18,18 @@ let appState = {
     full_name: '',
     auth_mode: null
   },
+  linkedin: {
+    authenticated: false,
+    profile_path: null,
+    server: null
+  },
   filters: {
     locations: [],
     work_arrangements: [],
     experience_levels: [],
     industries: [],
     companies: [],
+    sources: ['linkedin', 'indeed', 'remote_boards', 'curated'],
     custom_locations: [],
     custom_industries: []
   },
@@ -466,6 +472,26 @@ async function checkSystemStatus() {
       if (notConnectedSection) notConnectedSection.classList.remove("hidden");
     }
 
+    // LinkedIn MCP status
+    appState.linkedin = data.linkedin;
+    const linkedinDot = document.getElementById("linkedinStatusDot");
+    const linkedinText = document.getElementById("linkedinStatusText");
+    const modalLinkedInStatus = document.getElementById("modalLinkedInStatusDisplay");
+
+    if (data.linkedin && data.linkedin.authenticated) {
+      if (linkedinDot) linkedinDot.className = "w-2 h-2 rounded-full bg-emerald-400";
+      if (linkedinText) linkedinText.innerText = "LinkedIn: Connected";
+      if (modalLinkedInStatus) {
+        modalLinkedInStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>Authenticated & Connected</span>`;
+      }
+    } else {
+      if (linkedinDot) linkedinDot.className = "w-2 h-2 rounded-full bg-amber-400";
+      if (linkedinText) linkedinText.innerText = "LinkedIn: Sync Needed";
+      if (modalLinkedInStatus) {
+        modalLinkedInStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400"></span><span>Needs Sync / Reconnect</span>`;
+      }
+    }
+
     // Tracker stats badge in nav
     if (data.tracker_stats) {
       document.getElementById("navTrackerCount").innerText = data.tracker_stats.Total || 0;
@@ -749,6 +775,13 @@ function toggleFilterPill(btn, type, value) {
     } else {
       appState.filters.industries = appState.filters.industries.filter(v => v !== value);
     }
+  } else if (type === 'source') {
+    if (!appState.filters.sources) appState.filters.sources = [];
+    if (isActive) {
+      if (!appState.filters.sources.includes(value)) appState.filters.sources.push(value);
+    } else {
+      appState.filters.sources = appState.filters.sources.filter(v => v !== value);
+    }
   }
 
   updateActiveFilterTags();
@@ -903,7 +936,7 @@ function getSourceBadge(source) {
   const s = source || 'Verified';
   const lower = s.toLowerCase();
   if (lower.includes('linkedin')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0A66C2]/20 text-[#38bdf8] border border-[#0A66C2]/40 flex items-center space-x-1"><span>LinkedIn</span></span>`;
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0A66C2]/20 text-[#38bdf8] border border-[#0A66C2]/40 flex items-center space-x-1"><i data-lucide="linkedin" class="w-3 h-3"></i><span>LinkedIn MCP</span></span>`;
   }
   if (lower.includes('indeed')) {
     return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#2164f3]/20 text-[#60a5fa] border border-[#2164f3]/40 flex items-center space-x-1"><span>Indeed</span></span>`;
@@ -1042,6 +1075,7 @@ async function runJobSearch() {
     experience_levels: appState.filters.experience_levels,
     industries: appState.filters.industries,
     companies: companies,
+    sources: appState.filters.sources || ['linkedin', 'indeed', 'remote_boards', 'curated'],
     visa_requirement: visaReq,
     verification_filter: verificationFilter,
     min_score: minScore,
@@ -1441,9 +1475,14 @@ function selectJob(jobId) {
       applyLink.href = job.application_link;
       applyLink.target = "_blank";
       applyLink.rel = "noopener noreferrer";
-      applyLink.className = "px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-emerald-700/20 transition-all";
       const src = job.source || "Site";
-      applyLink.innerHTML = `<span>Apply on ${escapeHtml(src)}</span><i data-lucide="external-link" class="w-3.5 h-3.5"></i>`;
+      if (src.toLowerCase().includes("linkedin")) {
+        applyLink.className = "px-3.5 py-1.5 rounded-lg bg-[#0A66C2] hover:bg-[#004182] text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-[#0A66C2]/30 transition-all";
+        applyLink.innerHTML = `<i data-lucide="linkedin" class="w-3.5 h-3.5"></i><span>Apply on LinkedIn</span><i data-lucide="external-link" class="w-3.5 h-3.5"></i>`;
+      } else {
+        applyLink.className = "px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-emerald-700/20 transition-all";
+        applyLink.innerHTML = `<span>Apply on ${escapeHtml(src)}</span><i data-lucide="external-link" class="w-3.5 h-3.5"></i>`;
+      }
       applyLink.onclick = null;
     }
   }
@@ -2592,5 +2631,105 @@ async function runSchedulerNow() {
     btn.disabled = false;
     btn.innerHTML = `<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span>Run Now</span>`;
     lucide.createIcons();
+  }
+}
+
+// ============================================================================
+// LINKEDIN MCP INTEGRATION CONTROLLERS
+// ============================================================================
+
+function openLinkedInModal() {
+  const modal = document.getElementById("linkedinModal");
+  if (modal) modal.classList.remove("hidden");
+  lucide.createIcons();
+}
+
+function closeLinkedInModal() {
+  const modal = document.getElementById("linkedinModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+let lastModalLinkedInJobs = [];
+
+async function testLinkedInModalSearch() {
+  const kwInput = document.getElementById("modalLinkedInKeywords");
+  const locInput = document.getElementById("modalLinkedInLocation");
+  const kw = (kwInput ? kwInput.value.trim() : "") || "Python Developer";
+  const loc = (locInput ? locInput.value.trim() : "") || "India";
+  const btn = document.getElementById("modalLinkedInSearchBtn");
+  const resultsBox = document.getElementById("modalLinkedInResultsBox");
+  const countEl = document.getElementById("modalLinkedInResultsCount");
+  const listEl = document.getElementById("modalLinkedInJobsList");
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Querying LinkedIn MCP Server...</span>`;
+    lucide.createIcons();
+  }
+
+  try {
+    const res = await authFetch("/api/linkedin/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keywords: kw, location: loc, limit: 10 })
+    });
+    const data = await res.json();
+    if (data.success && data.jobs) {
+      lastModalLinkedInJobs = data.jobs;
+      if (resultsBox) resultsBox.classList.remove("hidden");
+      if (countEl) countEl.innerText = `${data.jobs.length} Verified LinkedIn Jobs Found`;
+      if (listEl) {
+        listEl.innerHTML = data.jobs.map(j => `
+          <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-2 text-xs">
+            <div class="truncate">
+              <div class="font-bold text-white truncate">${escapeHtml(j.title)}</div>
+              <div class="text-[11px] text-slate-400 truncate">${escapeHtml(j.company)} • ${escapeHtml(j.location)} (${escapeHtml(j.work_arrangement)})</div>
+            </div>
+            <a href="${escapeHtml(j.application_link)}" target="_blank" class="px-2.5 py-1 rounded bg-[#0A66C2]/20 hover:bg-[#0A66C2]/40 text-[#38bdf8] text-[11px] font-semibold shrink-0 flex items-center space-x-1">
+              <span>View</span>
+              <i data-lucide="external-link" class="w-3 h-3"></i>
+            </a>
+          </div>
+        `).join("");
+      }
+      showToast(`Retrieved ${data.jobs.length} live jobs from LinkedIn MCP!`);
+    } else {
+      showToast(data.detail || data.error || "Failed to query LinkedIn MCP", true);
+    }
+  } catch (err) {
+    showToast("LinkedIn MCP query error: " + err.message, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i data-lucide="search" class="w-3.5 h-3.5"></i><span>Search Live LinkedIn via MCP</span>`;
+    }
+    lucide.createIcons();
+  }
+}
+
+function applyLinkedInModalJobsToMainView() {
+  if (!lastModalLinkedInJobs || lastModalLinkedInJobs.length === 0) return;
+  const existingIds = new Set(appState.jobs.map(j => j.id));
+  const newJobs = lastModalLinkedInJobs.filter(j => !existingIds.has(j.id));
+  appState.jobs = [...newJobs, ...appState.jobs];
+  renderJobCards();
+  updateResultsCount();
+  if (newJobs.length > 0) selectJob(newJobs[0].id);
+  closeLinkedInModal();
+  showToast(`Loaded ${newJobs.length} live LinkedIn jobs into main workspace!`);
+}
+
+async function recheckLinkedInStatus() {
+  try {
+    const res = await authFetch("/api/linkedin/status");
+    const data = await res.json();
+    if (data.authenticated) {
+      showToast("LinkedIn MCP session verified & active!");
+    } else {
+      showToast("LinkedIn session needs sync from Chrome.", true);
+    }
+    checkSystemStatus();
+  } catch (err) {
+    showToast("Failed to verify LinkedIn status: " + err.message, true);
   }
 }

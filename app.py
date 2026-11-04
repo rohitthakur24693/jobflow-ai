@@ -169,11 +169,23 @@ async def get_system_status(current_user: Optional[Dict[str, Any]] = Depends(get
         "model": "Gemini 2.5 Flash" if gemini_key else "NLP Semantic Matcher"
     }
 
+    try:
+        from linkedin_mcp_client import LinkedInMCPClient
+        l_stat = LinkedInMCPClient().get_status()
+        linkedin_status = {
+            "authenticated": l_stat.get("authenticated", False),
+            "profile": str(Path.home() / ".linkedin-mcp" / "profile"),
+            "server": "stickerdaniel/linkedin-mcp-server"
+        }
+    except Exception as e:
+        linkedin_status = {"authenticated": False, "error": str(e)}
+
     if not current_user:
         return {
             "authenticated": False,
             "user": None,
             "gmail": get_gmail_status(None),
+            "linkedin": linkedin_status,
             "ai_engine": ai_status,
             "has_resume": False,
             "resume": None,
@@ -209,6 +221,7 @@ async def get_system_status(current_user: Optional[Dict[str, Any]] = Depends(get
         "authenticated": True,
         "user": current_user,
         "gmail": gmail_stat,
+        "linkedin": linkedin_status,
         "ai_engine": ai_status,
         "has_resume": active_resume is not None,
         "resume": resume_info,
@@ -939,6 +952,76 @@ async def trigger_gmail_disconnect(current_user: Dict[str, Any] = Depends(get_cu
     user_id = current_user["id"]
     res = disconnect_gmail(user_id)
     return res
+
+# ============================================================================
+# LINKEDIN MCP ENDPOINTS
+# ============================================================================
+
+class LinkedInSearchRequest(BaseModel):
+    keywords: str = "Software Engineer"
+    location: Optional[str] = "India"
+    limit: Optional[int] = 15
+
+@app.get("/api/linkedin/status")
+async def get_linkedin_status_endpoint():
+    """Get status of LinkedIn MCP server and authenticated user profile."""
+    try:
+        from linkedin_mcp_client import LinkedInMCPClient
+        client = LinkedInMCPClient()
+        status = client.get_status()
+        profile_path = str(Path.home() / ".linkedin-mcp" / "profile")
+        return {
+            "success": True,
+            "authenticated": status.get("authenticated", False),
+            "profile_path": profile_path,
+            "server": "stickerdaniel/linkedin-mcp-server",
+            "details": (status.get("output") or "").strip()
+        }
+    except Exception as e:
+        return {"success": False, "authenticated": False, "error": str(e)}
+
+@app.post("/api/linkedin/search")
+async def search_linkedin_direct(req: LinkedInSearchRequest):
+    """Query LinkedIn MCP server directly for live authenticated job postings."""
+    try:
+        from linkedin_mcp_client import LinkedInMCPClient
+        client = LinkedInMCPClient()
+        status = client.get_status()
+        if not status.get("authenticated"):
+            raise HTTPException(
+                status_code=400,
+                detail="LinkedIn session is not authenticated. Please sync session from Chrome browser."
+            )
+        jobs = client.search_jobs_structured(
+            keywords=req.keywords,
+            location=req.location or "India",
+            max_pages=1,
+            limit=req.limit or 15
+        )
+        return {
+            "success": True,
+            "total": len(jobs),
+            "jobs": jobs
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/linkedin/sync")
+async def sync_linkedin_session():
+    """Trigger automated session check / validation."""
+    try:
+        from linkedin_mcp_client import LinkedInMCPClient
+        client = LinkedInMCPClient()
+        status = client.get_status()
+        return {
+            "success": True,
+            "authenticated": status.get("authenticated", False),
+            "message": "LinkedIn session verified and active." if status.get("authenticated") else "Session requires sync."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/settings/credentials")
 async def upload_oauth_credentials(file: UploadFile = File(...)):

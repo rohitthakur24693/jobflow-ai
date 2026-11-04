@@ -87,6 +87,12 @@ class LinkedInMCPClient:
             return {"error": str(e)}
         finally:
             try:
+                if proc.stdin:
+                    proc.stdin.close()
+                if proc.stdout:
+                    proc.stdout.close()
+                if proc.stderr:
+                    proc.stderr.close()
                 proc.terminate()
                 proc.wait(timeout=3)
             except Exception:
