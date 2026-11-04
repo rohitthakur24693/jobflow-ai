@@ -12,6 +12,70 @@ import subprocess
 from typing import Dict, Any, List, Optional
 
 UVX_PATH = r"C:\Users\rohit\.local\bin\uvx.exe" if os.path.exists(r"C:\Users\rohit\.local\bin\uvx.exe") else "uvx"
+SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+COOKIES_FILE = os.path.expanduser(r"~/.linkedin-mcp/cookies.json")
+
+def get_linkedin_cookie() -> str:
+    """Retrieve active li_at session cookie from env, settings, or profile cookies."""
+    # 1. Environment variable (Render cloud environment or container)
+    env_c = os.environ.get("LINKEDIN_LI_AT") or os.environ.get("LI_AT") or ""
+    if env_c and env_c.strip():
+        return env_c.strip()
+
+    # 2. Local settings.json
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                s = json.load(f)
+                c = s.get("linkedin_li_at", "").strip()
+                if c:
+                    return c
+        except Exception:
+            pass
+
+    # 3. ~/.linkedin-mcp/cookies.json
+    if os.path.exists(COOKIES_FILE):
+        try:
+            with open(COOKIES_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    for item in data:
+                        if item.get("name") == "li_at":
+                            return item.get("value", "").strip()
+        except Exception:
+            pass
+
+    return ""
+
+def save_linkedin_cookie(cookie: str):
+    """Save li_at session cookie for active use."""
+    data = {}
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+    data["linkedin_li_at"] = cookie.strip()
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    try:
+        os.makedirs(os.path.dirname(COOKIES_FILE), exist_ok=True)
+        cookies = [{
+            "name": "li_at",
+            "value": cookie.strip(),
+            "domain": ".linkedin.com",
+            "path": "/",
+            "expires": -1,
+            "httpOnly": True,
+            "secure": True,
+            "sameSite": "None"
+        }]
+        with open(COOKIES_FILE, "w", encoding="utf-8") as f:
+            json.dump(cookies, f, indent=2)
+    except Exception:
+        pass
 
 class LinkedInMCPClient:
     def __init__(self, uvx_cmd: str = UVX_PATH):
