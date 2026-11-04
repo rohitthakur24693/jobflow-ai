@@ -174,8 +174,9 @@ async def get_system_status(current_user: Optional[Dict[str, Any]] = Depends(get
         l_stat = LinkedInMCPClient().get_status()
         linkedin_status = {
             "authenticated": l_stat.get("authenticated", False),
-            "profile": str(Path.home() / ".linkedin-mcp" / "profile"),
-            "server": "stickerdaniel/linkedin-mcp-server"
+            "profile": l_stat.get("profile", str(Path.home() / ".linkedin-mcp" / "profile")),
+            "server": l_stat.get("server", "stickerdaniel/linkedin-mcp-server / Authenticated Session"),
+            "mode": l_stat.get("mode", "authenticated_session")
         }
     except Exception as e:
         linkedin_status = {"authenticated": False, "error": str(e)}
@@ -962,6 +963,9 @@ class LinkedInSearchRequest(BaseModel):
     location: Optional[str] = "India"
     limit: Optional[int] = 15
 
+class LinkedInCookieRequest(BaseModel):
+    cookie: str
+
 @app.get("/api/linkedin/status")
 async def get_linkedin_status_endpoint():
     """Get status of LinkedIn MCP server and authenticated user profile."""
@@ -969,16 +973,40 @@ async def get_linkedin_status_endpoint():
         from linkedin_mcp_client import LinkedInMCPClient
         client = LinkedInMCPClient()
         status = client.get_status()
-        profile_path = str(Path.home() / ".linkedin-mcp" / "profile")
         return {
             "success": True,
             "authenticated": status.get("authenticated", False),
-            "profile_path": profile_path,
-            "server": "stickerdaniel/linkedin-mcp-server",
+            "mode": status.get("mode", "authenticated_session"),
+            "profile_path": status.get("profile", str(Path.home() / ".linkedin-mcp" / "profile")),
+            "server": status.get("server", "stickerdaniel/linkedin-mcp-server / Authenticated Session"),
             "details": (status.get("output") or "").strip()
         }
     except Exception as e:
         return {"success": False, "authenticated": False, "error": str(e)}
+
+@app.post("/api/linkedin/connect-cookie")
+async def connect_linkedin_cookie_endpoint(req: LinkedInCookieRequest):
+    """Save or update the LinkedIn session cookie (li_at) for authenticated queries."""
+    if not req.cookie or not req.cookie.strip():
+        raise HTTPException(status_code=400, detail="LinkedIn li_at cookie cannot be empty.")
+    
+    clean_cookie = req.cookie.strip()
+    if clean_cookie.startswith("li_at="):
+        clean_cookie = clean_cookie[len("li_at="):].strip()
+    if (clean_cookie.startswith('"') and clean_cookie.endswith('"')) or (clean_cookie.startswith("'") and clean_cookie.endswith("'")):
+        clean_cookie = clean_cookie[1:-1].strip()
+
+    from linkedin_mcp_client import save_linkedin_cookie, LinkedInMCPClient
+    os.environ["LINKEDIN_LI_AT"] = clean_cookie
+    save_linkedin_cookie(clean_cookie)
+    
+    client = LinkedInMCPClient()
+    status = client.get_status()
+    return {
+        "success": True,
+        "authenticated": status.get("authenticated", False),
+        "message": "LinkedIn li_at session cookie activated successfully!"
+    }
 
 @app.post("/api/linkedin/search")
 async def search_linkedin_direct(req: LinkedInSearchRequest):

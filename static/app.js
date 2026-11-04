@@ -2726,10 +2726,50 @@ async function recheckLinkedInStatus() {
     if (data.authenticated) {
       showToast("LinkedIn MCP session verified & active!");
     } else {
-      showToast("LinkedIn session needs sync from Chrome.", true);
+      showToast("LinkedIn session needs sync or li_at cookie.", true);
     }
     checkSystemStatus();
   } catch (err) {
     showToast("Failed to verify LinkedIn status: " + err.message, true);
+  }
+}
+
+async function saveLinkedInCookieFromModal() {
+  const input = document.getElementById("modalLinkedInCookieInput");
+  const btn = document.getElementById("modalLinkedInCookieBtn");
+  const val = input ? input.value.trim() : "";
+  if (!val) {
+    showToast("Please enter a valid li_at cookie value", true);
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Saving...</span>`;
+    lucide.createIcons();
+  }
+
+  try {
+    const res = await authFetch("/api/linkedin/connect-cookie", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cookie: val })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast("LinkedIn session cookie activated successfully!");
+      if (input) input.value = "";
+      await checkSystemStatus();
+    } else {
+      showToast(data.detail || data.error || "Failed to activate cookie", true);
+    }
+  } catch (err) {
+    showToast("Error saving cookie: " + err.message, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i data-lucide="save" class="w-3.5 h-3.5"></i><span>Save & Connect</span>`;
+      lucide.createIcons();
+    }
   }
 }
