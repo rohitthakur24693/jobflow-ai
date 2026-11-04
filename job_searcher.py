@@ -3261,179 +3261,157 @@ def search_jobs(
     seen_keys = set()
     limit_per_source = max(10, max_results)
 
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    req_sources = [s.lower().strip() for s in (sources or []) if s and s.strip()]
+    should_run_all = not req_sources or "all" in req_sources
+
+    def wants_source(src_keywords: List[str]) -> bool:
+        if should_run_all:
+            return True
+        return any(any(sk in s for sk in src_keywords) for s in req_sources)
+
+    tasks = []
+
     # 0. High-Fidelity Verified Company Career Portals & Direct Opportunities
-    curated_pool = get_curated_global_jobs()
-    curated_results = filter_curated_jobs(
-        jobs=curated_pool,
-        keywords=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        experience_levels=experience_levels,
-        industries=industries,
-        companies=companies,
-        visa_required=(visa_requirement.lower() == "required")
-    )
-    for j in curated_results:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
+    if wants_source(["curated", "verified"]):
+        def run_curated():
+            curated_pool = get_curated_global_jobs()
+            return filter_curated_jobs(
+                jobs=curated_pool,
+                keywords=keywords,
+                locations=locations,
+                work_arrangements=work_arrangements,
+                experience_levels=experience_levels,
+                industries=industries,
+                companies=companies,
+                visa_required=(visa_requirement.lower() == "required")
+            )
+        tasks.append(run_curated)
 
     # 1. Fetch live and curated jobs from LinkedIn
-    linkedin_results = fetch_linkedin_jobs(
-        query=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        experience_levels=experience_levels,
-        limit=limit_per_source
-    )
-    for j in linkedin_results:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
-
-    # 2. Fetch active and curated jobs from Indeed
-    indeed_results = fetch_indeed_jobs(
-        query=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        experience_levels=experience_levels,
-        limit=limit_per_source
-    )
-    for j in indeed_results:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
-
-    # 3. Fetch premier jobs from Naukri.com
-    naukri_results = fetch_naukri_jobs(
-        query=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        experience_levels=experience_levels,
-        limit=limit_per_source
-    )
-    for j in naukri_results:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
-
-    # 4. Fetch live jobs from Arbeitnow
-    arbeitnow_results = fetch_arbeitnow_jobs(
-        query=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        limit=limit_per_source
-    )
-    for j in arbeitnow_results:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
-
-    # 5. Fetch live jobs from Remotive
-    remotive_results = fetch_remotive_jobs(
-        query=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        limit=limit_per_source
-    )
-    for j in remotive_results:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
-
-    # 6. Fetch live jobs from Jobicy
-    jobicy_results = fetch_jobicy_jobs(
-        query=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        limit=limit_per_source
-    )
-    for j in jobicy_results:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
-
-    # 7. Fetch International Platforms (Glassdoor, FlexJobs, Wellfound, Dice, We Work Remotely, Remote OK, etc.)
-    intl_jobs = fetch_international_platform_jobs(
-        query=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        experience_levels=experience_levels,
-        limit=limit_per_source
-    )
-    for j in intl_jobs:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
-
-    # 7b. Fetch European Job Mobility Portal (EURES - https://eures.europa.eu/jobseekers_en)
-    # Active whenever user searches or selects preferred country that is NOT India or Indian cities
-    if is_non_india_targeted(locations, keywords):
-        eures_jobs = fetch_eures_jobs(
+    if wants_source(["linkedin"]):
+        tasks.append(lambda: fetch_linkedin_jobs(
             query=keywords,
             locations=locations,
             work_arrangements=work_arrangements,
             experience_levels=experience_levels,
             limit=limit_per_source
-        )
-        for j in eures_jobs:
-            key = f"{j['title'].lower()}_{j['company'].lower()}"
-            if key not in seen_keys:
-                seen_keys.add(key)
-                all_jobs.append(j)
+        ))
+
+    # 2. Fetch active and curated jobs from Indeed
+    if wants_source(["indeed"]):
+        tasks.append(lambda: fetch_indeed_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            experience_levels=experience_levels,
+            limit=limit_per_source
+        ))
+
+    # 3. Fetch premier jobs from Naukri.com
+    if wants_source(["naukri"]):
+        tasks.append(lambda: fetch_naukri_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            experience_levels=experience_levels,
+            limit=limit_per_source
+        ))
+
+    # 4. Fetch live jobs from Arbeitnow
+    if wants_source(["arbeitnow", "remote_boards"]):
+        tasks.append(lambda: fetch_arbeitnow_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            limit=limit_per_source
+        ))
+
+    # 5. Fetch live jobs from Remotive
+    if wants_source(["remotive", "remote_boards"]):
+        tasks.append(lambda: fetch_remotive_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            limit=limit_per_source
+        ))
+
+    # 6. Fetch live jobs from Jobicy
+    if wants_source(["jobicy", "remote_boards"]):
+        tasks.append(lambda: fetch_jobicy_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            limit=limit_per_source
+        ))
+
+    # 7. Fetch International Platforms (Glassdoor, FlexJobs, Wellfound, Dice, We Work Remotely, Remote OK, etc.)
+    if wants_source(["international", "glassdoor", "remote_boards"]):
+        tasks.append(lambda: fetch_international_platform_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            experience_levels=experience_levels,
+            limit=limit_per_source
+        ))
+
+    # 7b. Fetch European Job Mobility Portal (EURES)
+    if is_non_india_targeted(locations, keywords) and wants_source(["eures", "international"]):
+        tasks.append(lambda: fetch_eures_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            experience_levels=experience_levels,
+            limit=limit_per_source
+        ))
 
     # 8. Fetch Indian Job Platforms (Foundit, Instahyre, iimjobs, Hirist, Cutshort, Shine, TimesJobs, Apna)
-    indian_jobs = fetch_indian_platform_jobs(
-        query=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        experience_levels=experience_levels,
-        limit=limit_per_source
-    )
-    for j in indian_jobs:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
+    if wants_source(["indian", "foundit"]):
+        tasks.append(lambda: fetch_indian_platform_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            experience_levels=experience_levels,
+            limit=limit_per_source
+        ))
 
     # 9. Fetch Freelance & Contract Platforms (Upwork, Fiverr, Toptal, Freelancer)
-    freelance_jobs = fetch_freelance_platform_jobs(
-        query=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        experience_levels=experience_levels,
-        limit=limit_per_source
-    )
-    for j in freelance_jobs:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
+    if wants_source(["freelance", "upwork", "fiverr"]):
+        tasks.append(lambda: fetch_freelance_platform_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            experience_levels=experience_levels,
+            limit=limit_per_source
+        ))
 
-    # 10. Fetch Direct Company Career Portals (Google, Microsoft, Amazon, Meta, Apple, IBM, Accenture, etc.)
-    portal_jobs = fetch_company_career_portal_jobs(
-        query=keywords,
-        locations=locations,
-        work_arrangements=work_arrangements,
-        experience_levels=experience_levels,
-        companies=companies,
-        limit=limit_per_source
-    )
-    for j in portal_jobs:
-        key = f"{j['title'].lower()}_{j['company'].lower()}"
-        if key not in seen_keys:
-            seen_keys.add(key)
-            all_jobs.append(j)
+    # 10. Fetch Direct Company Career Portals
+    if wants_source(["portal", "company"]):
+        tasks.append(lambda: fetch_company_career_portal_jobs(
+            query=keywords,
+            locations=locations,
+            work_arrangements=work_arrangements,
+            experience_levels=experience_levels,
+            companies=companies,
+            limit=limit_per_source
+        ))
 
-    # (Step 0 Curated Global Jobs already processed above)
+    # Execute all matching scrapers concurrently for lightning-fast response times
+    max_w = min(8, max(1, len(tasks)))
+    with ThreadPoolExecutor(max_workers=max_w) as executor:
+        futures = [executor.submit(t) for t in tasks]
+        for f in as_completed(futures):
+            try:
+                res_jobs = f.result()
+                for j in (res_jobs or []):
+                    key = f"{j['title'].lower()}_{j['company'].lower()}"
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        all_jobs.append(j)
+            except Exception as exc:
+                print(f"[Search Worker] Error in task: {exc}")
+
 
     # Final Strict Location Verification Pass
     if locations:
