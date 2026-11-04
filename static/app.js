@@ -936,7 +936,7 @@ function getSourceBadge(source) {
   const s = source || 'Verified';
   const lower = s.toLowerCase();
   if (lower.includes('linkedin')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0A66C2]/20 text-[#38bdf8] border border-[#0A66C2]/40 flex items-center space-x-1"><i data-lucide="linkedin" class="w-3 h-3"></i><span>LinkedIn MCP</span></span>`;
+    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0A66C2]/20 text-[#38bdf8] border border-[#0A66C2]/40 flex items-center space-x-1"><svg class="w-3 h-3 fill-current inline-block" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg><span>LinkedIn MCP</span></span>`;
   }
   if (lower.includes('indeed')) {
     return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#2164f3]/20 text-[#60a5fa] border border-[#2164f3]/40 flex items-center space-x-1"><span>Indeed</span></span>`;
@@ -1478,7 +1478,7 @@ function selectJob(jobId) {
       const src = job.source || "Site";
       if (src.toLowerCase().includes("linkedin")) {
         applyLink.className = "px-3.5 py-1.5 rounded-lg bg-[#0A66C2] hover:bg-[#004182] text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-[#0A66C2]/30 transition-all";
-        applyLink.innerHTML = `<i data-lucide="linkedin" class="w-3.5 h-3.5"></i><span>Apply on LinkedIn</span><i data-lucide="external-link" class="w-3.5 h-3.5"></i>`;
+        applyLink.innerHTML = `<svg class="w-3.5 h-3.5 fill-current inline-block" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg><span>Apply on LinkedIn</span><i data-lucide="external-link" class="w-3.5 h-3.5"></i>`;
       } else {
         applyLink.className = "px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-emerald-700/20 transition-all";
         applyLink.innerHTML = `<span>Apply on ${escapeHtml(src)}</span><i data-lucide="external-link" class="w-3.5 h-3.5"></i>`;
