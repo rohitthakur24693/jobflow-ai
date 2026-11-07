@@ -2,7 +2,8 @@ import re
 import html
 import hashlib
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, Union
+import time
+from typing import List, Dict, Any, Optional, Union, Tuple
 from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
@@ -3252,6 +3253,9 @@ def enrich_job_metadata(job: Dict[str, Any]) -> Dict[str, Any]:
 
     return job
 
+_SEARCH_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+CACHE_TTL_SECONDS = 300  # 5 minutes TTL
+
 def search_jobs(
     keywords: str = "",
     locations: Optional[List[str]] = None,
@@ -3277,6 +3281,14 @@ def search_jobs(
         locations = []
     if location and location.strip() and location.strip() not in locations:
         locations = list(locations) + [location.strip()]
+
+    # Fast in-memory cache lookup
+    cache_key = f"{keywords.lower().strip()}_{','.join(sorted(locations))}_{','.join(sorted(work_arrangements or []))}_{visa_requirement}_{max_results}"
+    now = time.time()
+    if cache_key in _SEARCH_CACHE:
+        cached_time, cached_jobs = _SEARCH_CACHE[cache_key]
+        if now - cached_time < CACHE_TTL_SECONDS:
+            return [dict(j) for j in cached_jobs]
 
     all_jobs: List[Dict[str, Any]] = []
     seen_keys = set()
@@ -3357,4 +3369,9 @@ def search_jobs(
     elif visa_req in ["international_only", "international"]:
         all_jobs = [j for j in all_jobs if j.get("is_international")]
 
-    return all_jobs[:max_results]
+    results = all_jobs[:max_results]
+    _SEARCH_CACHE[cache_key] = (now, results)
+    if len(_SEARCH_CACHE) > 50:
+        oldest_key = min(_SEARCH_CACHE.keys(), key=lambda k: _SEARCH_CACHE[k][0])
+        del _SEARCH_CACHE[oldest_key]
+    return results

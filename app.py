@@ -92,6 +92,14 @@ async def serve_index():
 # AUTHENTICATION & ACCESS CONTROL ENDPOINTS
 # ============================================================================
 
+def is_secure_connection(request: Request) -> bool:
+    """Check if the incoming connection is HTTPS (direct, forwarded, or Render host)."""
+    return (
+        request.url.scheme == "https"
+        or request.headers.get("x-forwarded-proto") == "https"
+        or os.environ.get("RENDER") is not None
+    )
+
 class RegisterRequest(BaseModel):
     email: str
     password: str
@@ -99,7 +107,7 @@ class RegisterRequest(BaseModel):
     last_name: Optional[str] = ""
 
 @app.post("/api/auth/register")
-async def register(req: RegisterRequest, response: Response):
+async def register(req: RegisterRequest, response: Response, request: Request):
     """Register a new user account with strict data isolation."""
     try:
         user = create_user(
@@ -114,7 +122,8 @@ async def register(req: RegisterRequest, response: Response):
             value=token,
             httponly=True,
             max_age=7 * 86400,
-            samesite="lax"
+            samesite="lax",
+            secure=is_secure_connection(request)
         )
         return {
             "success": True,
@@ -133,7 +142,7 @@ class LoginRequest(BaseModel):
     password: str
 
 @app.post("/api/auth/login")
-async def login(req: LoginRequest, response: Response):
+async def login(req: LoginRequest, response: Response, request: Request):
     """Authenticate user credentials and issue an isolated session token."""
     user = authenticate_user(req.email, req.password)
     if not user:
@@ -145,7 +154,8 @@ async def login(req: LoginRequest, response: Response):
         value=token,
         httponly=True,
         max_age=7 * 86400,
-        samesite="lax"
+        samesite="lax",
+        secure=is_secure_connection(request)
     )
     return {
         "success": True,

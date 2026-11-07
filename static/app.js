@@ -239,7 +239,7 @@ async function handleLogout() {
   const navTrackerCount = document.getElementById("navTrackerCount");
   if (navTrackerCount) navTrackerCount.innerText = "0";
 
-  const cardsContainer = document.getElementById("jobCardsList");
+  const cardsContainer = document.getElementById("jobCardsListContainer") || document.getElementById("jobCardsList");
   if (cardsContainer) cardsContainer.innerHTML = `
     <div class="py-16 text-center text-slate-500">
       <i data-lucide="shield" class="w-10 h-10 mx-auto mb-2 text-slate-600"></i>
@@ -247,7 +247,7 @@ async function handleLogout() {
       <p class="text-xs text-slate-500 mt-1">Please sign in to access your personal workspace and jobs.</p>
     </div>
   `;
-  const detailEmpty = document.getElementById("jobDetailEmpty");
+  const detailEmpty = document.getElementById("noJobSelectedPlaceholder") || document.getElementById("jobDetailEmpty");
   const detailContent = document.getElementById("jobDetailContent");
   if (detailEmpty) detailEmpty.classList.remove("hidden");
   if (detailContent) detailContent.classList.add("hidden");
