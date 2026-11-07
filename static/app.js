@@ -29,7 +29,7 @@ let appState = {
     experience_levels: [],
     industries: [],
     companies: [],
-    sources: ['linkedin', 'indeed', 'remote_boards', 'curated'],
+    sources: ['linkedin'],
     custom_locations: [],
     custom_industries: []
   },
@@ -776,12 +776,7 @@ function toggleFilterPill(btn, type, value) {
       appState.filters.industries = appState.filters.industries.filter(v => v !== value);
     }
   } else if (type === 'source') {
-    if (!appState.filters.sources) appState.filters.sources = [];
-    if (isActive) {
-      if (!appState.filters.sources.includes(value)) appState.filters.sources.push(value);
-    } else {
-      appState.filters.sources = appState.filters.sources.filter(v => v !== value);
-    }
+    appState.filters.sources = ['linkedin'];
   }
 
   updateActiveFilterTags();
@@ -933,75 +928,7 @@ function getVisaBadge(visaStatus, isInternational) {
 }
 
 function getSourceBadge(source) {
-  const s = source || 'Verified';
-  const lower = s.toLowerCase();
-  if (lower.includes('linkedin')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0A66C2]/20 text-[#38bdf8] border border-[#0A66C2]/40 flex items-center space-x-1"><svg class="w-3 h-3 fill-current inline-block" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg><span>LinkedIn MCP</span></span>`;
-  }
-  if (lower.includes('indeed')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#2164f3]/20 text-[#60a5fa] border border-[#2164f3]/40 flex items-center space-x-1"><span>Indeed</span></span>`;
-  }
-  if (lower.includes('naukri')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center space-x-1"><span>Naukri.com</span></span>`;
-  }
-  if (lower.includes('glassdoor')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Glassdoor</span>`;
-  }
-  if (lower.includes('wellfound') || lower.includes('angellist')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">Wellfound</span>`;
-  }
-  if (lower.includes('flexjobs')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">FlexJobs</span>`;
-  }
-  if (lower.includes('dice')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-500/20 text-red-300 border border-red-500/40">Dice</span>`;
-  }
-  if (lower.includes('remotely') || lower.includes('weworkremotely')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-orange-500/20 text-orange-300 border border-orange-500/40">WeWorkRemotely</span>`;
-  }
-  if (lower.includes('remote ok')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-pink-500/20 text-pink-300 border border-pink-500/40">Remote OK</span>`;
-  }
-  if (lower.includes('foundit')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">Foundit</span>`;
-  }
-  if (lower.includes('instahyre')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-green-500/20 text-green-300 border border-green-500/40">Instahyre</span>`;
-  }
-  if (lower.includes('iimjobs') || lower.includes('hirist')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/40">${escapeHtml(s)}</span>`;
-  }
-  if (lower.includes('cutshort')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/40">Cutshort</span>`;
-  }
-  if (lower.includes('shine') || lower.includes('timesjobs') || lower.includes('apna')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">${escapeHtml(s)}</span>`;
-  }
-  if (lower.includes('upwork')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600/20 text-emerald-300 border border-emerald-600/40">Upwork</span>`;
-  }
-  if (lower.includes('toptal')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600/20 text-blue-300 border border-blue-600/40">Toptal</span>`;
-  }
-  if (lower.includes('fiverr') || lower.includes('freelancer')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">${escapeHtml(s)}</span>`;
-  }
-  if (lower.includes('eurojobs') || lower.includes('eures') || lower.includes('stepstone') || lower.includes('totaljobs') || lower.includes('reed') || lower.includes('cv-library') || lower.includes('otta')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/40">${escapeHtml(s)}</span>`;
-  }
-  if (lower.includes('remotive')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">Remotive</span>`;
-  }
-  if (lower.includes('arbeitnow')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-teal-500/15 text-teal-300 border border-teal-500/30">Arbeitnow</span>`;
-  }
-  if (lower.includes('jobicy')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">Jobicy</span>`;
-  }
-  if (lower.includes('career portal') || lower.includes('portal') || lower.includes('careers')) {
-    return `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">Career Portal</span>`;
-  }
-  return `<span class="px-2 py-0.5 rounded text-[10px] text-slate-400 bg-slate-800 border border-slate-700 font-medium">${escapeHtml(s)}</span>`;
+  return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0A66C2]/20 text-[#38bdf8] border border-[#0A66C2]/40 flex items-center space-x-1"><svg class="w-3 h-3 fill-current inline-block" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg><span>LinkedIn</span></span>`;
 }
 
 function resetAllFilters() {
@@ -1075,7 +1002,7 @@ async function runJobSearch() {
     experience_levels: appState.filters.experience_levels,
     industries: appState.filters.industries,
     companies: companies,
-    sources: appState.filters.sources || ['linkedin', 'indeed', 'remote_boards', 'curated'],
+    sources: ['linkedin'],
     visa_requirement: visaReq,
     verification_filter: verificationFilter,
     min_score: minScore,

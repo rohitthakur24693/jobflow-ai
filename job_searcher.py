@@ -1506,7 +1506,10 @@ def fetch_linkedin_jobs(
 ) -> List[Dict[str, Any]]:
     """
     Fetch live and curated jobs from LinkedIn.
-    Uses LinkedIn Guest Jobs API for live public job listings with graceful curated fallback.
+    Uses:
+    1. Authenticated LinkedIn MCP Client / session
+    2. Multi-location & paginated LinkedIn Guest Jobs API
+    3. Curated active premier LinkedIn opportunities
     """
     jobs: List[Dict[str, Any]] = []
     seen = set()
@@ -1528,7 +1531,7 @@ def fetch_linkedin_jobs(
             mcp_jobs = mcp_client.search_jobs_structured(
                 keywords=search_query,
                 location=primary_location,
-                max_pages=1,
+                max_pages=2,
                 limit=limit
             )
             for j in mcp_jobs:
@@ -1539,6 +1542,7 @@ def fetch_linkedin_jobs(
                         continue
                     if experience_levels and not is_experience_compatible(j, experience_levels):
                         continue
+                    j["source"] = "LinkedIn"
                     jobs.append(j)
                     if len(jobs) >= limit:
                         break
@@ -1547,75 +1551,91 @@ def fetch_linkedin_jobs(
     except Exception as mcp_err:
         print(f"[LinkedIn MCP] Notice: {mcp_err}")
 
-    # 2. Attempt live LinkedIn public guest search (fallback if needed)
+    # 2. Attempt live LinkedIn public guest search (multi-location & paginated)
     if len(jobs) < limit:
-        try:
-            url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={requests.utils.quote(search_query)}&location={requests.utils.quote(primary_location)}&start=0"
-            resp = requests.get(url, headers=headers, timeout=6)
-            if resp.status_code == 200 and resp.text:
-                soup = BeautifulSoup(resp.text, "html.parser")
-                cards = soup.find_all("li")
-                for c in cards:
-                    title_el = c.find("h3", class_=re.compile(r"base-search-card__title|job-title"))
-                    company_el = c.find("h4", class_=re.compile(r"base-search-card__subtitle|job-company"))
-                    loc_el = c.find("span", class_=re.compile(r"job-search-card__location|job-location"))
-                    link_el = c.find("a", class_=re.compile(r"base-card__full-link|job-link"))
-                    time_el = c.find("time")
-                    
-                    title = title_el.text.strip() if title_el else ""
-                    company = company_el.text.strip() if company_el else ""
-                    loc = loc_el.text.strip() if loc_el else primary_location
-                    job_url = link_el["href"].split("?")[0] if (link_el and "href" in link_el.attrs and "/view/" in link_el["href"]) else ""
-                    date_str = time_el.text.strip() if time_el else datetime.now().strftime("%Y-%m-%d")
-                    
-                    if not title or not company:
-                        continue
-                        
-                    key = f"{title.lower()}_{company.lower()}"
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    
-                    desc = f"{title} at {company} located in {loc}. Seeking qualified candidates with expertise in {search_query}. Review requirements and submit application directly on LinkedIn."
-                    req_skills = extract_required_skills(f"{title} {desc}")
-                    if not req_skills:
-                        req_skills = [search_query.title(), "System Design", "Agile", "Git"]
-                        
-                    recruiter_email = extract_recruiter_email(desc, company, job_url)
-                    visa_info = detect_visa_sponsorship(desc)
-                    salary = extract_salary_range(desc, loc)
-                    work_arr = detect_work_arrangement(loc, desc)
-                    job_id = hashlib.md5(f"linkedin_{title}_{company}_{job_url}".encode()).hexdigest()[:12]
-                    
-                    jobs.append({
-                        "id": job_id,
-                        "title": title,
-                        "company": company,
-                        "location": loc,
-                        "work_arrangement": work_arr,
-                        "is_remote": work_arr == "Remote",
-                        "employment_type": "Full-time",
-                        "salary": salary,
-                        "industry": "Information Technology",
-                        "description": desc,
-                        "required_skills": req_skills,
-                        "application_link": job_url,
-                        "recruiter_email": recruiter_email,
-                        "visa_sponsorship": visa_info,
-                        "posted_date": date_str,
-                        "source": "LinkedIn"
-                    })
-                    if len(jobs) >= limit:
-                        break
-        except Exception as e:
-            print(f"Live LinkedIn fetch error: {e}")
+        target_locs = [l.strip() for l in (locations or []) if l.strip()]
+        if not target_locs:
+            target_locs = [primary_location]
+
+        for target_loc in target_locs[:3]:
+            if len(jobs) >= limit:
+                break
+            for start_offset in [0, 10, 25]:
+                if len(jobs) >= limit:
+                    break
+                try:
+                    url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={requests.utils.quote(search_query)}&location={requests.utils.quote(target_loc)}&start={start_offset}"
+                    resp = requests.get(url, headers=headers, timeout=6)
+                    if resp.status_code == 200 and resp.text:
+                        soup = BeautifulSoup(resp.text, "html.parser")
+                        cards = soup.find_all("li")
+                        for c in cards:
+                            title_el = c.find("h3", class_=re.compile(r"base-search-card__title|job-title"))
+                            company_el = c.find("h4", class_=re.compile(r"base-search-card__subtitle|job-company"))
+                            loc_el = c.find("span", class_=re.compile(r"job-search-card__location|job-location"))
+                            link_el = c.find("a", class_=re.compile(r"base-card__full-link|job-link"))
+                            time_el = c.find("time")
+                            
+                            title = title_el.text.strip() if title_el else ""
+                            company = company_el.text.strip() if company_el else ""
+                            loc = loc_el.text.strip() if loc_el else target_loc
+                            raw_href = link_el["href"] if (link_el and "href" in link_el.attrs) else ""
+                            job_url = raw_href.split("?")[0] if raw_href else ""
+                            date_str = time_el.text.strip() if time_el else datetime.now().strftime("%Y-%m-%d")
+                            
+                            if not title or not company:
+                                continue
+                                
+                            key = f"{title.lower()}_{company.lower()}"
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            
+                            if not job_url:
+                                job_url = f"https://www.linkedin.com/jobs/search/?keywords={requests.utils.quote(title + ' ' + company)}"
+                            elif job_url.startswith("/"):
+                                job_url = f"https://www.linkedin.com{job_url}"
+                            
+                            desc = f"{title} at {company} located in {loc}. Seeking qualified candidates with expertise in {search_query}. Review requirements and submit application directly on LinkedIn."
+                            req_skills = extract_required_skills(f"{title} {desc}")
+                            if not req_skills:
+                                req_skills = [search_query.title(), "System Design", "Agile", "Git"]
+                                
+                            recruiter_email = extract_recruiter_email(desc, company, job_url)
+                            visa_info = detect_visa_sponsorship(desc)
+                            salary = extract_salary_range(desc, loc)
+                            work_arr = detect_work_arrangement(loc, desc)
+                            job_id = hashlib.md5(f"linkedin_{title}_{company}_{job_url}".encode()).hexdigest()[:12]
+                            
+                            jobs.append({
+                                "id": job_id,
+                                "title": title,
+                                "company": company,
+                                "location": loc,
+                                "work_arrangement": work_arr,
+                                "is_remote": work_arr == "Remote",
+                                "employment_type": "Full-time",
+                                "salary": salary,
+                                "industry": "Information Technology",
+                                "description": desc,
+                                "required_skills": req_skills,
+                                "application_link": job_url,
+                                "recruiter_email": recruiter_email,
+                                "visa_sponsorship": visa_info,
+                                "posted_date": date_str,
+                                "source": "LinkedIn"
+                            })
+                            if len(jobs) >= limit:
+                                break
+                except Exception as e:
+                    print(f"Live LinkedIn fetch error for {target_loc} offset {start_offset}: {e}")
 
     # 3. Add curated LinkedIn active jobs
     curated_linkedin = get_curated_linkedin_jobs()
     for cj in curated_linkedin:
-        if len(jobs) >= limit * 2:
+        if len(jobs) >= limit:
             break
-        title_blob = f"{cj['title']} {cj['company']} {cj['description']} {' '.join(cj['required_skills'])}".lower()
+        title_blob = f"{cj['title']} {cj['company']} {cj['description']} {' '.join(cj.get('required_skills', []))}".lower()
         if query and not any(k.strip().lower() in title_blob for k in query.split(",") if k.strip()):
             continue
         if locations and not is_location_compatible(cj['location'], cj['description'], locations, work_arrangements):
@@ -1625,6 +1645,7 @@ def fetch_linkedin_jobs(
         key = f"{cj['title'].lower()}_{cj['company'].lower()}"
         if key not in seen:
             seen.add(key)
+            cj["source"] = "LinkedIn"
             jobs.append(cj)
 
     return jobs
@@ -3246,192 +3267,72 @@ def search_jobs(
     max_results: int = 35
 ) -> List[Dict[str, Any]]:
     """
-    Multi-source job search engine supporting multi-select criteria:
-    - Multiple locations simultaneously (India, Netherlands, Germany, US, UK, etc.)
-    - Multiple work arrangements (Remote, Hybrid, Onsite)
-    - Multiple experience levels (1-3, 3-5, 5-8, etc.)
-    - Multiple industries (IT, Banking, Healthcare, etc.)
-    - Deduplicates listings and prioritizes recently posted jobs.
+    LinkedIn-Exclusive Job Search Engine.
+    Strictly aggregates job postings solely from LinkedIn:
+    - Live authenticated LinkedIn MCP session
+    - Live LinkedIn public guest search (multi-location & paginated)
+    - Verified LinkedIn career listings
     """
     if locations is None:
         locations = []
     if location and location.strip() and location.strip() not in locations:
         locations = list(locations) + [location.strip()]
+
     all_jobs: List[Dict[str, Any]] = []
     seen_keys = set()
-    limit_per_source = max(10, max_results)
+    limit_per_source = max(35, max_results * 2)
 
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    # Exclusively fetch jobs from LinkedIn
+    linkedin_jobs = fetch_linkedin_jobs(
+        query=keywords,
+        locations=locations,
+        work_arrangements=work_arrangements,
+        experience_levels=experience_levels,
+        limit=limit_per_source
+    )
 
-    req_sources = [s.lower().strip() for s in (sources or []) if s and s.strip()]
-    should_run_all = not req_sources or "all" in req_sources
+    for j in linkedin_jobs:
+        # Guarantee source is strictly marked as LinkedIn
+        j["source"] = "LinkedIn"
+        key = f"{j['title'].lower()}_{j['company'].lower()}"
+        if key not in seen_keys:
+            seen_keys.add(key)
+            all_jobs.append(j)
 
-    def wants_source(src_keywords: List[str]) -> bool:
-        if should_run_all:
-            return True
-        return any(any(sk in s for sk in src_keywords) for s in req_sources)
-
-    tasks = []
-
-    # 0. High-Fidelity Verified Company Career Portals & Direct Opportunities
-    if wants_source(["curated", "verified"]):
-        def run_curated():
-            curated_pool = get_curated_global_jobs()
-            return filter_curated_jobs(
-                jobs=curated_pool,
-                keywords=keywords,
-                locations=locations,
-                work_arrangements=work_arrangements,
-                experience_levels=experience_levels,
-                industries=industries,
-                companies=companies,
-                visa_required=(visa_requirement.lower() == "required")
-            )
-        tasks.append(run_curated)
-
-    # 1. Fetch live and curated jobs from LinkedIn
-    if wants_source(["linkedin"]):
-        tasks.append(lambda: fetch_linkedin_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            experience_levels=experience_levels,
-            limit=limit_per_source
-        ))
-
-    # 2. Fetch active and curated jobs from Indeed
-    if wants_source(["indeed"]):
-        tasks.append(lambda: fetch_indeed_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            experience_levels=experience_levels,
-            limit=limit_per_source
-        ))
-
-    # 3. Fetch premier jobs from Naukri.com
-    if wants_source(["naukri"]):
-        tasks.append(lambda: fetch_naukri_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            experience_levels=experience_levels,
-            limit=limit_per_source
-        ))
-
-    # 4. Fetch live jobs from Arbeitnow
-    if wants_source(["arbeitnow", "remote_boards"]):
-        tasks.append(lambda: fetch_arbeitnow_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            limit=limit_per_source
-        ))
-
-    # 5. Fetch live jobs from Remotive
-    if wants_source(["remotive", "remote_boards"]):
-        tasks.append(lambda: fetch_remotive_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            limit=limit_per_source
-        ))
-
-    # 6. Fetch live jobs from Jobicy
-    if wants_source(["jobicy", "remote_boards"]):
-        tasks.append(lambda: fetch_jobicy_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            limit=limit_per_source
-        ))
-
-    # 7. Fetch International Platforms (Glassdoor, FlexJobs, Wellfound, Dice, We Work Remotely, Remote OK, etc.)
-    if wants_source(["international", "glassdoor", "remote_boards"]):
-        tasks.append(lambda: fetch_international_platform_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            experience_levels=experience_levels,
-            limit=limit_per_source
-        ))
-
-    # 7b. Fetch European Job Mobility Portal (EURES)
-    if is_non_india_targeted(locations, keywords) and wants_source(["eures", "international"]):
-        tasks.append(lambda: fetch_eures_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            experience_levels=experience_levels,
-            limit=limit_per_source
-        ))
-
-    # 8. Fetch Indian Job Platforms (Foundit, Instahyre, iimjobs, Hirist, Cutshort, Shine, TimesJobs, Apna)
-    if wants_source(["indian", "foundit"]):
-        tasks.append(lambda: fetch_indian_platform_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            experience_levels=experience_levels,
-            limit=limit_per_source
-        ))
-
-    # 9. Fetch Freelance & Contract Platforms (Upwork, Fiverr, Toptal, Freelancer)
-    if wants_source(["freelance", "upwork", "fiverr"]):
-        tasks.append(lambda: fetch_freelance_platform_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            experience_levels=experience_levels,
-            limit=limit_per_source
-        ))
-
-    # 10. Fetch Direct Company Career Portals
-    if wants_source(["portal", "company"]):
-        tasks.append(lambda: fetch_company_career_portal_jobs(
-            query=keywords,
-            locations=locations,
-            work_arrangements=work_arrangements,
-            experience_levels=experience_levels,
-            companies=companies,
-            limit=limit_per_source
-        ))
-
-    # Execute all matching scrapers concurrently for lightning-fast response times
-    max_w = min(8, max(1, len(tasks)))
-    with ThreadPoolExecutor(max_workers=max_w) as executor:
-        futures = [executor.submit(t) for t in tasks]
-        for f in as_completed(futures):
-            try:
-                res_jobs = f.result()
-                for j in (res_jobs or []):
-                    key = f"{j['title'].lower()}_{j['company'].lower()}"
-                    if key not in seen_keys:
-                        seen_keys.add(key)
-                        all_jobs.append(j)
-            except Exception as exc:
-                print(f"[Search Worker] Error in task: {exc}")
-
-
-    # Final Strict Location Verification Pass
+    # Location compatibility filter
     if locations:
-        all_jobs = [
+        loc_filtered = [
             j for j in all_jobs
             if is_location_compatible(j.get("location", ""), j.get("description", ""), locations, work_arrangements)
         ]
+        if loc_filtered:
+            all_jobs = loc_filtered
 
-    # Strict Experience Verification Pass
+    # Experience compatibility filter
     if experience_levels:
-        all_jobs = [
+        exp_filtered = [
             j for j in all_jobs
             if is_experience_compatible(j, experience_levels)
         ]
+        if exp_filtered:
+            all_jobs = exp_filtered
 
-    # Enrich all collected jobs with verification, country, and visa metadata
+    # Company filter if provided
+    if companies:
+        comp_lower = [c.lower().strip() for c in companies if c.strip()]
+        if comp_lower:
+            comp_filtered = [
+                j for j in all_jobs
+                if any(c in j.get("company", "").lower() for c in comp_lower)
+            ]
+            if comp_filtered:
+                all_jobs = comp_filtered
+
+    # Enrich metadata (verification status, visa, country)
     for j in all_jobs:
         enrich_job_metadata(j)
 
-    # Exclude expired postings from active results by default, or prioritize them if requested
+    # Exclude expired postings if requested
     if not include_expired:
         all_jobs = [j for j in all_jobs if not j.get("is_expired") and j.get("verification_status") != "Expired / Unavailable"]
     else:
@@ -3445,7 +3346,7 @@ def search_jobs(
     elif verification_filter == "exclude_suspicious":
         all_jobs = [j for j in all_jobs if j.get("verification_status") != "Potentially Suspicious"]
 
-    # Visa Requirement Filter
+    # Visa requirement filter
     visa_req = (visa_requirement or "any").lower().strip()
     if visa_req in ["sponsorship_available", "sponsored", "available", "yes", "requires sponsorship"]:
         all_jobs = [j for j in all_jobs if j.get("visa_status") == "Visa Sponsorship Available"]
@@ -3456,30 +3357,4 @@ def search_jobs(
     elif visa_req in ["international_only", "international"]:
         all_jobs = [j for j in all_jobs if j.get("is_international")]
 
-    # Multi-source balanced interleaving: ensures International, Indian, Freelance,
-    # and Direct Company Portals are all represented in search results
-    category_pools = [
-        [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["linkedin", "indeed", "naukri", "arbeitnow", "remotive", "jobicy"])],
-        [j for j in all_jobs if "eures" in (j.get("source") or "").lower()],
-        [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["glassdoor", "flexjobs", "wellfound", "dice", "weworkremotely", "remotely", "remote ok", "eurojobs", "stepstone", "totaljobs", "reed", "cv-library", "otta"]) and "eures" not in (j.get("source") or "").lower()],
-        [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["foundit", "instahyre", "iimjobs", "hirist", "cutshort", "shine", "timesjobs", "apna"])],
-        [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["upwork", "fiverr", "toptal", "freelancer"])],
-        [j for j in all_jobs if any(k in (j.get("source") or "").lower() for k in ["career portal", "google", "microsoft", "amazon", "meta", "apple", "ibm", "accenture", "deloitte", "ey", "pwc", "kpmg", "capgemini", "sap", "oracle", "salesforce", "adobe", "nvidia", "booking", "spotify", "revolut", "wise", "stripe", "airbnb", "uber"])],
-    ]
-    interleaved: List[Dict[str, Any]] = []
-    max_len = max((len(p) for p in category_pools if p), default=0)
-    seen_interleaved = set()
-    for idx in range(max_len):
-        for pool in category_pools:
-            if idx < len(pool):
-                item = pool[idx]
-                item_key = f"{item['title'].lower()}_{item['company'].lower()}"
-                if item_key not in seen_interleaved:
-                    seen_interleaved.add(item_key)
-                    interleaved.append(item)
-
-    if interleaved:
-        all_jobs = interleaved
-
-    results = all_jobs[:max_results]
-    return results
+    return all_jobs[:max_results]

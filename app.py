@@ -424,7 +424,7 @@ class SearchRequest(BaseModel):
     industries: List[str] = []
     industry: str = "All"
     companies: List[str] = []
-    sources: List[str] = []
+    sources: List[str] = ["linkedin"]
     visa_requirement: str = "any"
     verification_filter: str = "all"
     include_expired: bool = False
