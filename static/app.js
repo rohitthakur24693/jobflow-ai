@@ -326,6 +326,21 @@ document.addEventListener("DOMContentLoaded", () => {
   loadTrackerData();
   loadSchedulerData();
   updateActiveFilterTags();
+
+  // Prevent browser password manager from mistakenly autofilling custom filter inputs
+  const clearFilterInputs = () => {
+    const indInput = document.getElementById("customIndustryInput");
+    if (indInput && (!appState.filters.custom_industries || !appState.filters.custom_industries.includes(indInput.value))) {
+      indInput.value = "";
+    }
+    const locInput = document.getElementById("customLocationInput");
+    if (locInput && (!appState.filters.custom_locations || !appState.filters.custom_locations.includes(locInput.value))) {
+      locInput.value = "";
+    }
+  };
+  clearFilterInputs();
+  setTimeout(clearFilterInputs, 150);
+  setTimeout(clearFilterInputs, 500);
 });
 
 // ============================================================================

@@ -175,12 +175,12 @@
           
           <div class="md:col-span-7 relative">
             <i data-lucide="search" class="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5"></i>
-            <input type="text" id="inputKeywords" placeholder="Job titles, tech stack, skills (e.g. Software Engineer, React, Python, Data)..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors shadow-inner">
+            <input type="text" id="inputKeywords" name="search_keywords_query" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-form-type="other" placeholder="Job titles, tech stack, skills (e.g. Software Engineer, React, Python, Data)..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors shadow-inner">
           </div>
 
           <div class="md:col-span-3 relative">
             <i data-lucide="building" class="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5"></i>
-            <input type="text" id="inputCompanies" placeholder="Preferred companies (e.g. Google, Stripe, SAP)..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors shadow-inner">
+            <input type="text" id="inputCompanies" name="search_companies_filter" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-form-type="other" placeholder="Preferred companies (e.g. Google, Stripe, SAP)..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors shadow-inner">
           </div>
 
           <div class="md:col-span-2">
@@ -224,7 +224,7 @@
               
               <!-- Custom Location Input -->
               <div class="inline-flex items-center rounded-lg bg-slate-950 border border-slate-700 px-2 py-0.5 text-xs">
-                <input type="text" id="customLocationInput" placeholder="+ Add city/region..." onkeydown="handleCustomLocationKey(event)" class="bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none w-28">
+                <input type="text" id="customLocationInput" name="custom_location_search_filter" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-form-type="other" placeholder="+ Add city/region..." onkeydown="handleCustomLocationKey(event)" class="bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none w-28">
                 <button type="button" onclick="addCustomLocation()" class="text-slate-400 hover:text-emerald-400 pl-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i></button>
               </div>
             </div>
@@ -282,7 +282,7 @@
 
               <!-- Custom Industry Input -->
               <div class="inline-flex items-center rounded-lg bg-slate-950 border border-slate-700 px-2 py-0.5 text-xs">
-                <input type="text" id="customIndustryInput" placeholder="+ Add custom..." onkeydown="handleCustomIndustryKey(event)" class="bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none w-24">
+                <input type="text" id="customIndustryInput" name="custom_industry_search_filter" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-form-type="other" placeholder="+ Add custom..." onkeydown="handleCustomIndustryKey(event)" class="bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none w-24">
                 <button type="button" onclick="addCustomIndustry()" class="text-slate-400 hover:text-emerald-400 pl-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i></button>
               </div>
             </div>
@@ -1275,8 +1275,8 @@
               Generate a 16-character App Password at <a href="https://myaccount.google.com/apppasswords" target="_blank" class="text-emerald-400 underline font-semibold">myaccount.google.com/apppasswords</a> and paste it below:
             </p>
             <div class="space-y-2">
-              <input type="email" id="appPassEmailInput" placeholder="Your Gmail address" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
-              <input type="password" id="appPassKeyInput" placeholder="16-character App Password (e.g. abcd efgh ijkl mnop)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
+              <input type="email" id="appPassEmailInput" name="gmail_app_email" autocomplete="off" data-lpignore="true" placeholder="Your Gmail address" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+              <input type="password" id="appPassKeyInput" name="gmail_app_key" autocomplete="new-password" data-lpignore="true" placeholder="16-character App Password (e.g. abcd efgh ijkl mnop)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
               <button onclick="connectWithAppPassword()" id="connectAppPassBtn" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-semibold text-xs flex items-center justify-center space-x-2 transition-all shadow-md shadow-emerald-700/20">
                 <i data-lucide="link" class="w-4 h-4"></i>
                 <span>Connect Gmail Instantly</span>
@@ -1295,8 +1295,8 @@
           <div class="border border-slate-800 rounded-xl p-4 bg-slate-950/60 space-y-3">
             <div class="space-y-2">
               <label class="text-[11px] font-medium text-slate-400">OAuth Client ID & Client Secret</label>
-              <input type="text" id="oauthClientIdInput" placeholder="Client ID (e.g. 123...apps.googleusercontent.com)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
-              <input type="password" id="oauthClientSecretInput" placeholder="Client Secret (e.g. GOCSPX-...)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
+              <input type="text" id="oauthClientIdInput" name="google_oauth_client_id" autocomplete="off" data-lpignore="true" placeholder="Client ID (e.g. 123...apps.googleusercontent.com)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
+              <input type="password" id="oauthClientSecretInput" name="google_oauth_client_secret" autocomplete="new-password" data-lpignore="true" placeholder="Client Secret (e.g. GOCSPX-...)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
               <button onclick="saveOAuthKeysAndConnect()" id="saveKeysBtn" class="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium text-xs flex items-center justify-center space-x-1.5 transition-colors">
                 <i data-lucide="key" class="w-3.5 h-3.5 text-emerald-400"></i>
                 <span>Save Keys & Connect OAuth</span>
@@ -1361,7 +1361,7 @@
             JobFlow uses your authenticated LinkedIn session cookie to fetch live, full-fidelity job postings without popup interruptions or rate limits.
           </p>
           <div class="flex items-center space-x-2">
-            <input type="password" id="modalLinkedInCookieInput" placeholder="Paste li_at cookie value (AQED...)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#0A66C2] font-mono">
+            <input type="password" id="modalLinkedInCookieInput" name="linkedin_cookie_token" autocomplete="new-password" data-lpignore="true" placeholder="Paste li_at cookie value (AQED...)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#0A66C2] font-mono">
             <button onclick="saveLinkedInCookieFromModal()" id="modalLinkedInCookieBtn" class="px-3.5 py-2 rounded-lg bg-[#0A66C2] hover:bg-[#004182] text-white font-semibold text-xs transition-colors flex items-center space-x-1.5 whitespace-nowrap">
               <i data-lucide="save" class="w-3.5 h-3.5"></i>
               <span>Save & Connect</span>
@@ -1451,7 +1451,7 @@
             <span class="text-[11px] text-emerald-400">Powers LLM analysis</span>
           </label>
           <div class="flex space-x-2">
-            <input type="password" id="settingsGeminiKeyInput" placeholder="AIzaSy..." class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
+            <input type="password" id="settingsGeminiKeyInput" name="gemini_key_token" autocomplete="new-password" data-lpignore="true" placeholder="AIzaSy..." class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
             <button onclick="saveGeminiKey()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs transition-colors">Save</button>
           </div>
           <p class="text-[11px] text-slate-500">If omitted, JobFlow AI automatically uses its high-accuracy NLP semantic matcher.</p>
@@ -1511,12 +1511,12 @@
 
         <div>
           <label class="block text-[11px] font-medium text-slate-400 mb-1">Email Address</label>
-          <input type="email" id="authEmail" required placeholder="you@example.com" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+          <input type="email" id="authEmail" name="username" autocomplete="username" required placeholder="you@example.com" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
         </div>
 
         <div>
           <label class="block text-[11px] font-medium text-slate-400 mb-1">Password</label>
-          <input type="password" id="authPassword" required placeholder="••••••••" minlength="6" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
+          <input type="password" id="authPassword" name="password" autocomplete="current-password" required placeholder="••••••••" minlength="6" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
         </div>
 
         <button type="submit" id="authSubmitBtn" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-semibold text-xs shadow-md shadow-emerald-700/25 transition-all">
