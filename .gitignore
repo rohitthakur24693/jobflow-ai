@@ -2,6 +2,8 @@
 .env
 .env.*
 *.env
+.auth_secret
+*.auth_secret
 settings.json
 credentials/
 tokens/

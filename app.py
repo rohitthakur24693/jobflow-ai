@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import uuid
 import json
@@ -42,7 +43,22 @@ from scheduler_service import (
     execute_scheduled_search, start_background_scheduler
 )
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
 app = FastAPI(title="JobFlow AI — Multi-Tenant AI Job Search & Application Platform", version="2.5.0")
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 @app.on_event("startup")
 async def on_startup():
@@ -312,33 +328,44 @@ async def upload_resume(
     3. Strictly preserves exact original filename for application attachments.
     """
     user_id = current_user["id"]
-    orig_name = file.filename
-    ext = Path(orig_name).suffix.lower()
+    raw_name = file.filename or "resume.pdf"
+    
+    # Path Traversal Prevention (CWE-22): strictly sanitize filename
+    clean_name = os.path.basename(raw_name).strip()
+    clean_name = re.sub(r'[\x00/\\:*?"<>|]', '_', clean_name)
+    if not clean_name:
+        clean_name = f"resume_{uuid.uuid4().hex[:8]}.pdf"
+
+    ext = Path(clean_name).suffix.lower()
     if ext not in [".pdf", ".docx", ".doc", ".txt", ".md"]:
         raise HTTPException(status_code=400, detail="Invalid format. Please upload PDF (.pdf) or Word (.docx) file.")
 
     # Dedicated isolated storage for this user
-    user_upload_dir = UPLOADS_DIR / user_id
+    user_upload_dir = (UPLOADS_DIR / user_id).resolve()
     user_upload_dir.mkdir(parents=True, exist_ok=True)
 
     # Sub-folder per upload to prevent name collisions on disk while preserving exact filename
     upload_token = uuid.uuid4().hex[:8]
-    target_dir = user_upload_dir / upload_token
+    target_dir = (user_upload_dir / upload_token).resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
-    save_path = target_dir / orig_name
+    save_path = (target_dir / clean_name).resolve()
+
+    # Enforce filesystem containment
+    if not str(save_path).startswith(str(target_dir)):
+        raise HTTPException(status_code=400, detail="Invalid path traversal sequence detected.")
 
     with open(save_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
     try:
         parsed_resume = parse_resume(str(save_path))
-        parsed_resume["original_filename"] = orig_name
-        parsed_resume["file_name"] = orig_name
+        parsed_resume["original_filename"] = clean_name
+        parsed_resume["file_name"] = clean_name
         parsed_resume["file_path"] = str(save_path)
 
         saved_resume = save_user_resume(
             user_id=user_id,
-            original_filename=orig_name,
+            original_filename=clean_name,
             file_path=str(save_path),
             parsed_data=parsed_resume
         )
@@ -985,7 +1012,10 @@ async def get_linkedin_status_endpoint():
         return {"success": False, "authenticated": False, "error": str(e)}
 
 @app.post("/api/linkedin/connect-cookie")
-async def connect_linkedin_cookie_endpoint(req: LinkedInCookieRequest):
+async def connect_linkedin_cookie_endpoint(
+    req: LinkedInCookieRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
     """Save or update the LinkedIn session cookie (li_at) for authenticated queries."""
     if not req.cookie or not req.cookie.strip():
         raise HTTPException(status_code=400, detail="LinkedIn li_at cookie cannot be empty.")
@@ -1009,7 +1039,10 @@ async def connect_linkedin_cookie_endpoint(req: LinkedInCookieRequest):
     }
 
 @app.post("/api/linkedin/search")
-async def search_linkedin_direct(req: LinkedInSearchRequest):
+async def search_linkedin_direct(
+    req: LinkedInSearchRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user)
+):
     """Query LinkedIn MCP server directly for live authenticated job postings."""
     try:
         from linkedin_mcp_client import LinkedInMCPClient
@@ -1037,8 +1070,8 @@ async def search_linkedin_direct(req: LinkedInSearchRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/linkedin/sync")
-async def sync_linkedin_session():
-    """Trigger automated session check / validation."""
+async def sync_linkedin_session(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Trigger automated session check / validation (strictly authenticated)."""
     try:
         from linkedin_mcp_client import LinkedInMCPClient
         client = LinkedInMCPClient()
@@ -1052,10 +1085,22 @@ async def sync_linkedin_session():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/settings/credentials")
-async def upload_oauth_credentials(file: UploadFile = File(...)):
-    """Upload Google Cloud client_secret.json."""
+async def upload_oauth_credentials(
+    file: UploadFile = File(...),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Upload Google Cloud client_secret.json (strictly authenticated)."""
+    if not file.filename or not file.filename.lower().endswith(".json"):
+        raise HTTPException(status_code=400, detail="Only client_secret.json format is permitted.")
     content = await file.read()
-    res = save_client_credentials(content.decode("utf-8"))
+    try:
+        json_data = json.loads(content.decode("utf-8"))
+        if not any(k in json_data for k in ["web", "installed"]):
+            raise HTTPException(status_code=400, detail="Invalid Google OAuth client_secret file format.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON file: {str(e)}")
+
+    res = save_client_credentials(json.dumps(json_data))
     if res.get("success"):
         return res
     raise HTTPException(status_code=400, detail=res.get("error"))
@@ -1064,8 +1109,11 @@ class ApiKeyRequest(BaseModel):
     gemini_api_key: str
 
 @app.post("/api/settings/gemini-key")
-async def update_gemini_key(req: ApiKeyRequest):
-    """Save Gemini API Key."""
+async def update_gemini_key(
+    req: ApiKeyRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Save Gemini API Key (strictly authenticated)."""
     set_gemini_api_key(req.gemini_api_key)
     return {"success": True, "message": "Gemini API Key updated successfully."}
 

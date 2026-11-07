@@ -8,9 +8,40 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
-from config import DATA_DIR, UPLOADS_DIR
+import base64
+from cryptography.fernet import Fernet
+from config import DATA_DIR, UPLOADS_DIR, AUTH_SECRET_KEY
 
 DB_PATH = DATA_DIR / "jobflow.db"
+
+def _get_credential_cipher():
+    """Derive deterministic Fernet AES key from server AUTH_SECRET_KEY."""
+    k = hashlib.sha256(AUTH_SECRET_KEY.encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(k))
+
+def encrypt_credential(text: str) -> str:
+    """Encrypt sensitive credentials at rest using AES-CBC-HMAC (Fernet)."""
+    if not text:
+        return ""
+    if text.startswith("enc:"):
+        return text
+    try:
+        cipher = _get_credential_cipher()
+        return "enc:" + cipher.encrypt(text.encode("utf-8")).decode("utf-8")
+    except Exception:
+        return text
+
+def decrypt_credential(text: str) -> str:
+    """Decrypt sensitive credentials encrypted at rest."""
+    if not text:
+        return ""
+    if text.startswith("enc:"):
+        try:
+            cipher = _get_credential_cipher()
+            return cipher.decrypt(text[4:].encode("utf-8")).decode("utf-8")
+        except Exception:
+            return ""
+    return text
 
 def get_connection() -> sqlite3.Connection:
     """Get a SQLite connection with row factory configured."""
@@ -188,6 +219,18 @@ def init_db():
             )
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_drafts_user ON user_drafts(user_id, job_id)")
+
+        # Security Migration: encrypt any legacy plaintext app_passwords at rest
+        try:
+            cursor.execute("SELECT user_id, app_password FROM user_gmail_credentials WHERE app_password != '' AND app_password NOT LIKE 'enc:%'")
+            unencrypted = cursor.fetchall()
+            for row in unencrypted:
+                u_id = row[0]
+                plain_pwd = row[1]
+                enc_pwd = encrypt_credential(plain_pwd)
+                cursor.execute("UPDATE user_gmail_credentials SET app_password = ? WHERE user_id = ?", (enc_pwd, u_id))
+        except Exception:
+            pass
 
         conn.commit()
 
@@ -656,6 +699,9 @@ def get_user_gmail_credentials(user_id: str) -> Dict[str, Any]:
         except Exception:
             pass
 
+        raw_pwd = row["app_password"] or ""
+        decrypted_pwd = decrypt_credential(raw_pwd)
+
         return {
             "connected": bool(row["connected"]),
             "email": row["email"] or None,
@@ -663,14 +709,16 @@ def get_user_gmail_credentials(user_id: str) -> Dict[str, Any]:
             "last_name": row["last_name"] or "",
             "full_name": row["full_name"] or "",
             "auth_mode": row["auth_mode"] or None,
-            "app_password": row["app_password"] or "",
+            "app_password": decrypted_pwd,
             "oauth_token": oauth_token
         }
 
 def save_user_gmail_credentials(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    """Save isolated Gmail connection for this user."""
+    """Save isolated Gmail connection for this user (encrypts app_password at rest)."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     oauth_json = json.dumps(data.get("oauth_token", {}))
+    raw_pwd = data.get("app_password", "")
+    stored_pwd = encrypt_credential(raw_pwd) if raw_pwd else ""
 
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -694,7 +742,7 @@ def save_user_gmail_credentials(user_id: str, data: Dict[str, Any]) -> Dict[str,
             1 if data.get("connected") else 0,
             data.get("email", ""),
             data.get("auth_mode", ""),
-            data.get("app_password", ""),
+            stored_pwd,
             oauth_json,
             data.get("first_name", ""),
             data.get("last_name", ""),

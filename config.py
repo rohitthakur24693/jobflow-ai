@@ -66,6 +66,34 @@ SERVER_HOST = os.environ.get("HOST", "0.0.0.0")
 SERVER_PORT = int(os.environ.get("PORT", 8000))
 
 # Authentication & Security
-AUTH_SECRET_KEY = os.environ.get("AUTH_SECRET_KEY", "jobflow-secure-jwt-key-2026-isolated-tenant")
+def get_auth_secret_key() -> str:
+    """
+    Retrieve or generate a cryptographically secure JWT authentication secret key.
+    Never falls back to a public or static hardcoded string.
+    """
+    env_secret = os.environ.get("AUTH_SECRET_KEY")
+    if env_secret and env_secret.strip() and env_secret.strip() != "jobflow-secure-jwt-key-2026-isolated-tenant":
+        return env_secret.strip()
+
+    secret_file = DATA_DIR / ".auth_secret"
+    if secret_file.exists():
+        try:
+            with open(secret_file, "r", encoding="utf-8") as f:
+                key = f.read().strip()
+                if key and len(key) >= 32:
+                    return key
+        except Exception:
+            pass
+
+    import secrets
+    new_key = secrets.token_urlsafe(48)
+    try:
+        with open(secret_file, "w", encoding="utf-8") as f:
+            f.write(new_key)
+    except Exception:
+        pass
+    return new_key
+
+AUTH_SECRET_KEY = get_auth_secret_key()
 AUTH_ALGORITHM = "HS256"
 AUTH_TOKEN_EXPIRE_DAYS = 7
